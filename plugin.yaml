@@ -1,0 +1,118 @@
+# Vision Validation Plugin for Fabrikator
+# AI-powered CAD geometry validation using Blender rendering and vision AI
+
+plugin:
+  name: Vision Validation
+  slug: vision-validator
+  version: 1.0.0
+  author: Fabrikator Team
+  description: |
+    AI-powered visual validation of 3D CAD geometry.
+    Renders 3MF files from multiple viewpoints using Blender and analyzes
+    the geometry using GPT-4 Vision or Gemini to detect issues.
+  tags:
+    - validation
+    - vision
+    - ai
+    - cad
+    - quality
+  iconUrl: https://fabrikator.ai/icons/vision-validate.png
+
+requirements:
+  apiKeys:
+    - name: OPENAI_API_KEY
+      description: OpenAI API key for GPT-4 Vision analysis
+      required: false
+      fallback: platform
+    - name: GEMINI_API_KEY
+      description: Google Gemini API key (alternative to OpenAI)
+      required: false
+      fallback: platform
+
+capabilities:
+  dataAccess:
+    artifacts: true
+    sessionState: true
+    storagePrefix: sessions/${sessionId}/artifacts/
+
+  prompts:
+    agents:
+      - agent: cad
+        position: append
+        priority: 60
+        content: |
+          ## VISION VALIDATION PLUGIN
+          
+          Use vision validation to verify your geometry is correct:
+          
+          ```
+          call_plugin(
+            pluginSlug="vision-validator",
+            toolName="vision_validate",
+            args={
+              part: "base",  // Part name to validate
+              partDescription: "..."  // REQUIRED for single parts
+            }
+          )
+          ```
+          
+          The plugin renders 5 views (ISO, Front, Right, Top, Bottom) and analyzes them.
+          
+          **How to write a good `partDescription`:**
+          1. **Overall shape**: Basic form (e.g., "90-degree elbow pipe", "cylindrical body with flange")
+          2. **Key features**: ALL geometric features present (e.g., "has external threading", "4 mounting holes")
+          3. **Connectivity**: How parts connect (e.g., "bend smoothly connects both legs")
+          4. **Hollow/internal**: Internal features (e.g., "hollow tube with 9mm inner diameter")
+          5. **Relative positions**: Feature locations (e.g., "flange near the bend")
+          
+          **Example good partDescription:**
+          `"90-degree elbow pipe where the bend smoothly connects both straight legs (no gaps). One leg is shorter and plain. The longer leg has external threading and a circular flange near the bend. The pipe is hollow throughout."`
+          
+          **IMPORTANT:**
+          - Vision validation CANNOT verify dimensions - it cannot measure from images
+          - Do NOT validate hardware.scad - hardware is visualization-only
+          - Validate all parts individually BEFORE validating assembly
+          - If verdict is FAIL: fix the identified issues
+          - If verdict is UNCERTAIN: add more specific checks
+
+  tools:
+    - name: vision_validate
+      description: |
+        Validate the visual integrity of a 3D part or assembly using AI vision analysis.
+        Renders 5 orthographic views and analyzes them for geometry issues.
+      parameters:
+        type: object
+        properties:
+          part:
+            type: string
+            description: The name of the SCAD part file (e.g., "base", "assembly"). REQUIRED.
+          partDescription:
+            type: string
+            description: |
+              Description of what this specific part should look like, its key features,
+              and geometry. REQUIRED when validating a single part (not assembly).
+          focus:
+            type: string
+            description: Optional free-form instructions describing what specific aspects to inspect.
+          checks:
+            type: array
+            items:
+              type: string
+            description: Optional list of specific checklist items to validate.
+        required:
+          - part
+        additionalProperties: false
+      execution:
+        type: external
+        config:
+          apiUrl: ${PLUGIN_VISION_VALIDATE_URL}
+          endpoint: /validate
+          timeout: 300000
+          retries: 1
+
+pricing:
+  model: free
+
+validation:
+  status: approved
+
