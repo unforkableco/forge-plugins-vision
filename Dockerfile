@@ -1,8 +1,12 @@
 # Vision Validate Plugin
 # Docker image for AI-powered CAD geometry validation with Blender rendering
-# 
-# This image is meant to be deployed on dedicated hardware with sufficient
-# resources for Blender rendering (GPU optional but recommended)
+#
+# GPU Support:
+# - Automatically detects and uses NVIDIA (CUDA/OptiX) or AMD (HIP) GPUs
+# - Falls back to CPU if no GPU is detected
+# - For NVIDIA: Run with --gpus all
+# - For AMD: Run with --device /dev/kfd --device /dev/dri
+# - GPU drivers must be installed on host (not in container)
 
 FROM ubuntu:22.04
 

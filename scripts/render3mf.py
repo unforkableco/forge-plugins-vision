@@ -19,7 +19,109 @@ import bpy
 import sys
 import os
 import math
+import subprocess
 from mathutils import Vector, Euler
+
+
+def detect_gpu_backend():
+    """
+    Detect available GPU and return appropriate Blender Cycles device type.
+
+    Returns:
+        str: 'OPTIX', 'CUDA', 'HIP', or 'CPU'
+    """
+    # Check for NVIDIA GPU
+    try:
+        # Check if nvidia-smi exists and works
+        result = subprocess.run(['nvidia-smi', '-L'],
+                              capture_output=True,
+                              text=True,
+                              timeout=2)
+        if result.returncode == 0 and 'GPU' in result.stdout:
+            print(f"[GPU] Detected NVIDIA GPU: {result.stdout.strip()}")
+
+            # Check if it's an RTX card (supports OptiX)
+            if 'RTX' in result.stdout.upper() or 'TESLA' in result.stdout.upper():
+                print("[GPU] Using OptiX for best performance")
+                return 'OPTIX'
+            else:
+                print("[GPU] Using CUDA")
+                return 'CUDA'
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+        pass
+
+    # Check for AMD GPU
+    try:
+        # Check for ROCm
+        result = subprocess.run(['rocminfo'],
+                              capture_output=True,
+                              text=True,
+                              timeout=2)
+        if result.returncode == 0 and 'Agent' in result.stdout:
+            print(f"[GPU] Detected AMD GPU via ROCm")
+            print("[GPU] Using HIP")
+            return 'HIP'
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+
+    # Check for AMD GPU via device files (fallback)
+    if os.path.exists('/dev/kfd') and os.path.exists('/dev/dri'):
+        dri_devices = [f for f in os.listdir('/dev/dri') if f.startswith('renderD')]
+        if dri_devices:
+            print(f"[GPU] Detected AMD GPU via device files: {dri_devices}")
+            print("[GPU] Using HIP")
+            return 'HIP'
+
+    # Fallback to CPU
+    print("[GPU] No GPU detected, using CPU rendering")
+    return 'CPU'
+
+
+def configure_gpu_device(device_type):
+    """
+    Configure Blender to use the specified device type.
+
+    Args:
+        device_type: 'OPTIX', 'CUDA', 'HIP', or 'CPU'
+    """
+    if device_type == 'CPU':
+        return  # CPU is default, no configuration needed
+
+    try:
+        # Get Cycles preferences
+        prefs = bpy.context.preferences.addons['cycles'].preferences
+
+        # Map our device types to Blender's compute device types
+        compute_device_map = {
+            'OPTIX': 'OPTIX',
+            'CUDA': 'CUDA',
+            'HIP': 'HIP'
+        }
+
+        compute_device = compute_device_map.get(device_type)
+        if not compute_device:
+            print(f"[GPU] Unknown device type: {device_type}, falling back to CPU")
+            return
+
+        # Set compute device type
+        prefs.compute_device_type = compute_device
+
+        # Refresh devices list
+        prefs.get_devices()
+
+        # Enable all available devices of this type
+        devices_found = False
+        for device in prefs.devices:
+            if device.type == compute_device:
+                device.use = True
+                devices_found = True
+                print(f"[GPU] Enabled device: {device.name} ({device.type})")
+
+        if not devices_found:
+            print(f"[GPU] Warning: {compute_device} selected but no devices found, using CPU")
+
+    except Exception as e:
+        print(f"[GPU] Error configuring GPU: {e}, falling back to CPU")
 
 
 def clear_scene():
@@ -293,29 +395,42 @@ def get_scene_bounds():
     return center, size
 
 
-def setup_render_settings(width=800, height=800, max_dim=1.0):
+def setup_render_settings(width=800, height=800, max_dim=1.0, device_type='CPU'):
     """Configure render settings for optimal feature visibility.
-    
+
     Uses Cycles renderer with Freestyle for edge rendering.
     EEVEE doesn't support Freestyle in Blender 2.82, and Workbench
     crashes in headless/WSL environments (needs OpenGL).
+
+    Args:
+        width: Render width in pixels
+        height: Render height in pixels
+        max_dim: Maximum dimension of the model
+        device_type: 'CPU', 'CUDA', 'OPTIX', or 'HIP'
     """
     scene = bpy.context.scene
-    
+
     # Resolution
     scene.render.resolution_x = width
     scene.render.resolution_y = height
     scene.render.resolution_percentage = 100
-    
+
     # Output format
     scene.render.image_settings.file_format = 'PNG'
     scene.render.image_settings.color_mode = 'RGBA'
     scene.render.image_settings.compression = 15
-    
+
     # Use Cycles - only renderer that supports Freestyle in headless mode
     scene.render.engine = 'CYCLES'
-    scene.cycles.device = 'CPU'  # CPU for WSL compatibility
-    scene.cycles.samples = 64    # Slightly higher samples for cleaner edges
+
+    # Configure device based on detection
+    if device_type == 'CPU':
+        scene.cycles.device = 'CPU'
+        scene.cycles.samples = 64    # CPU: moderate samples
+    else:
+        scene.cycles.device = 'GPU'
+        scene.cycles.samples = 128   # GPU: can handle more samples for better quality
+
     scene.cycles.use_denoising = False  # Keep edges sharp
     
     # Transparent background
@@ -500,15 +615,21 @@ def main():
     
     # Apply materials for proper 3D visualization
     setup_materials()
-    
+
     # Get scene bounds
     bounds_center, bounds_size = get_scene_bounds()
     print(f"Model bounds: center={bounds_center}, size={bounds_size}")
-    
+
+    # Detect and configure GPU
+    print("\n=== GPU Detection ===")
+    device_type = detect_gpu_backend()
+    configure_gpu_device(device_type)
+    print("====================\n")
+
     # Setup lighting and render settings
     max_dim = max(bounds_size.x, bounds_size.y, bounds_size.z, 1.0)
     setup_lighting(bounds_center, max_dim)
-    setup_render_settings(width=500, height=500, max_dim=max_dim)
+    setup_render_settings(width=500, height=500, max_dim=max_dim, device_type=device_type)
     
     # Render each view
     results = {}
