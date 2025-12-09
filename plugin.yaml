@@ -113,6 +113,3 @@ capabilities:
 pricing:
   model: free
 
-validation:
-  status: approved
-
