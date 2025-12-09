@@ -19,6 +19,10 @@ plugin:
 
 requirements:
   apiKeys:
+    - name: API_KEY
+      description: API key for authenticating requests to the vision service
+      required: true
+      fallback: none
     - name: OPENAI_API_KEY
       description: OpenAI API key for GPT-4 Vision analysis
       required: false

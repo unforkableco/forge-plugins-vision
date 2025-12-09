@@ -80,6 +80,7 @@ module "ecs" {
   max_size            = var.max_size
 
   # Environment variables
+  api_key             = var.api_key
   openai_api_key      = var.openai_api_key
   gemini_api_key      = var.gemini_api_key
   backend_url         = var.backend_url

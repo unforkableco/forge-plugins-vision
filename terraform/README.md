@@ -54,6 +54,7 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 
 **Important variables:**
+- `api_key`: **REQUIRED** - API key for authenticating requests (generate with `openssl rand -base64 32`)
 - `openai_api_key` or `gemini_api_key`: Required for AI analysis
 - `backend_url`: Your Fabrikator backend URL
 - `allowed_cidr_blocks`: Restrict access to your IP ranges
@@ -104,8 +105,10 @@ curl http://<alb_dns_name>/health
 ### Test Vision Validation
 
 ```bash
+# Note: Include your API key in the request
 curl -X POST http://<alb_dns_name>/validate \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d '{
     "context": {
       "sessionId": "test-123",
@@ -118,6 +121,11 @@ curl -X POST http://<alb_dns_name>/validate \
     }
   }'
 ```
+
+**Authentication:**
+- All requests (except `/health`) require an API key
+- Pass via `X-API-Key` header or `Authorization: Bearer <key>`
+- The API key is set via the `api_key` Terraform variable
 
 ## Cost Estimation
 

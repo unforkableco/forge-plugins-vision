@@ -58,6 +58,12 @@ variable "max_size" {
   type        = number
 }
 
+variable "api_key" {
+  description = "API key for authenticating requests"
+  type        = string
+  sensitive   = true
+}
+
 variable "openai_api_key" {
   description = "OpenAI API key"
   type        = string

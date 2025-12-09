@@ -118,6 +118,10 @@ resource "aws_ecs_task_definition" "main" {
             value = tostring(var.container_port)
           },
           {
+            name  = "API_KEY"
+            value = var.api_key
+          },
+          {
             name  = "BACKEND_URL"
             value = var.backend_url
           }

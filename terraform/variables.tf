@@ -116,6 +116,12 @@ variable "max_size" {
 }
 
 # Application Environment Variables
+variable "api_key" {
+  description = "API key for authenticating requests to the vision service"
+  type        = string
+  sensitive   = true
+}
+
 variable "openai_api_key" {
   description = "OpenAI API key for vision analysis"
   type        = string

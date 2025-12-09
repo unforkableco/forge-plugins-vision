@@ -1,21 +1,22 @@
 /**
  * Vision Validate Plugin Service
- * 
+ *
  * External service that provides AI-powered CAD geometry validation.
  * Deployed on dedicated hardware with Blender for rendering.
- * 
+ *
  * Flow:
  * 1. Receive validation request with part name and session info
  * 2. Fetch 3MF file from artifacts storage
  * 3. Render multiple views with Blender
  * 4. Analyze images with Vision AI (OpenAI GPT-4o or Gemini)
  * 5. Return verdict, issues, recommendations, and JPEG artifacts
- * 
+ *
  * API Endpoints:
- * - GET /health - Health check
- * - POST /validate - Execute vision validation
- * 
+ * - GET /health - Health check (no auth required)
+ * - POST /validate - Execute vision validation (requires API key)
+ *
  * Environment Variables:
+ * - API_KEY - API key for authenticating requests (required)
  * - OPENAI_API_KEY - OpenAI API key for vision analysis
  * - GEMINI_API_KEY - Gemini API key (alternative)
  * - STORAGE_BASE_URL - Base URL for artifact storage
@@ -36,11 +37,54 @@ app.use(express.json({ limit: '50mb' }));
 const PORT = process.env.PORT || 8080;
 const WORK_DIR = process.env.WORK_DIR || '/tmp/vision-validate';
 const BLENDER_PATH = process.env.BLENDER_PATH || 'blender';
+const API_KEY = process.env.API_KEY;
 
 // Ensure work directory exists
 if (!fs.existsSync(WORK_DIR)) {
   fs.mkdirSync(WORK_DIR, { recursive: true });
 }
+
+// API Key Authentication Middleware
+const authenticateApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Skip authentication for health check
+  if (req.path === '/health') {
+    return next();
+  }
+
+  // Check if API key is configured
+  if (!API_KEY) {
+    console.error('[AUTH] API_KEY environment variable not set');
+    return res.status(500).json({
+      ok: false,
+      error: 'Server configuration error: API key not configured'
+    });
+  }
+
+  // Extract API key from headers
+  const providedKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!providedKey) {
+    console.warn('[AUTH] Request missing API key');
+    return res.status(401).json({
+      ok: false,
+      error: 'Authentication required: Missing API key'
+    });
+  }
+
+  if (providedKey !== API_KEY) {
+    console.warn('[AUTH] Invalid API key provided');
+    return res.status(403).json({
+      ok: false,
+      error: 'Authentication failed: Invalid API key'
+    });
+  }
+
+  // Authentication successful
+  next();
+};
+
+// Apply authentication middleware to all routes
+app.use(authenticateApiKey);
 
 interface ValidationRequest {
   context: {
@@ -501,6 +545,13 @@ app.listen(PORT, () => {
   console.log(`Vision Validate Plugin running on port ${PORT}`);
   console.log(`Work directory: ${WORK_DIR}`);
   console.log(`Blender path: ${BLENDER_PATH}`);
+  console.log(`API Key authentication: ${API_KEY ? 'ENABLED' : 'DISABLED (WARNING!)'}`);
+  console.log(`OpenAI API Key: ${process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET'}`);
+  console.log(`Gemini API Key: ${process.env.GEMINI_API_KEY ? 'SET' : 'NOT SET'}`);
+
+  if (!API_KEY) {
+    console.error('⚠️  WARNING: API_KEY not set - service is not secured!');
+  }
 });
 
 

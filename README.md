@@ -28,7 +28,8 @@ This plugin provides visual validation capabilities for 3D CAD models. It render
 ```bash
 docker build -t forge-vision-validate .
 docker run -p 8080:8080 \
-  -e OPENAI_API_KEY=your-key \
+  -e API_KEY=your-secure-api-key \
+  -e OPENAI_API_KEY=your-openai-key \
   -e BACKEND_URL=http://host.docker.internal:3001 \
   forge-vision-validate
 ```
@@ -37,7 +38,8 @@ docker run -p 8080:8080 \
 ```bash
 docker run -p 8080:8080 \
   --gpus all \
-  -e OPENAI_API_KEY=your-key \
+  -e API_KEY=your-secure-api-key \
+  -e OPENAI_API_KEY=your-openai-key \
   -e BACKEND_URL=http://host.docker.internal:3001 \
   forge-vision-validate
 ```
@@ -48,7 +50,8 @@ docker run -p 8080:8080 \
   --device /dev/kfd \
   --device /dev/dri \
   --group-add video \
-  -e OPENAI_API_KEY=your-key \
+  -e API_KEY=your-secure-api-key \
+  -e OPENAI_API_KEY=your-openai-key \
   -e BACKEND_URL=http://host.docker.internal:3001 \
   forge-vision-validate
 ```
@@ -70,6 +73,7 @@ npm start
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | `8080` | Server port |
+| `API_KEY` | **Yes** | - | **API key for authenticating requests** |
 | `OPENAI_API_KEY` | Yes* | - | OpenAI API key for GPT-4 Vision |
 | `GEMINI_API_KEY` | Yes* | - | Google Gemini API key (alternative to OpenAI) |
 | `BACKEND_URL` | Yes | - | Fabrikator backend URL for fetching artifacts |
@@ -77,6 +81,33 @@ npm start
 | `WORK_DIR` | No | `/tmp/vision-validate` | Working directory for temp files |
 
 *One of `OPENAI_API_KEY` or `GEMINI_API_KEY` is required.
+
+## Authentication
+
+All API endpoints (except `/health`) require authentication via API key.
+
+**Include the API key in request headers:**
+```bash
+# Option 1: X-API-Key header
+curl -H "X-API-Key: your-api-key" http://localhost:8080/validate
+
+# Option 2: Authorization Bearer token
+curl -H "Authorization: Bearer your-api-key" http://localhost:8080/validate
+```
+
+**Generate a secure API key:**
+```bash
+# Generate a random API key (32 bytes, base64)
+openssl rand -base64 32
+
+# Example output: xK8Vz2mR... (use this as your API_KEY)
+```
+
+**Security:**
+- The `/health` endpoint is **public** (no authentication required)
+- All other endpoints require a valid API key
+- API key must match the `API_KEY` environment variable
+- Failed authentication returns `401 Unauthorized` or `403 Forbidden`
 
 ## API Endpoints
 
