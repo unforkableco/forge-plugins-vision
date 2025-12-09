@@ -4,7 +4,6 @@
 plugin:
   name: Vision Validation
   slug: vision-validator
-  version: 1.0.0
   author: Fabrikator Team
   description: |
     AI-powered visual validation of 3D CAD geometry.
