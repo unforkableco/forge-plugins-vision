@@ -102,9 +102,10 @@ capabilities:
           - part
         additionalProperties: false
       execution:
-        type: external
+        type: docker
         config:
-          apiUrl: ${PLUGIN_VISION_VALIDATE_URL}
+          image: ghcr.io/unforkableco/forge-plugins-vision:latest
+          port: 8080
           endpoint: /validate
           timeout: 300000
           retries: 1
