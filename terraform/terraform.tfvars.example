@@ -1,0 +1,43 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# General Configuration
+environment = "production"
+aws_region  = "us-east-1"
+
+# Networking Configuration
+vpc_cidr            = "10.0.0.0/16"
+availability_zones  = ["us-east-1a", "us-east-1b"]
+public_subnets      = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnets     = ["10.0.11.0/24", "10.0.12.0/24"]
+allowed_cidr_blocks = ["0.0.0.0/0"]  # CHANGE THIS: Restrict to your IP ranges
+
+# ECS Cluster Configuration
+cluster_name = "forge-vision-cluster"
+service_name = "vision-validator"
+
+# Container Configuration
+container_image  = "ghcr.io/unforkableco/forge-plugins-vision:latest"
+container_port   = 8080
+container_cpu    = 2048
+container_memory = 8192
+
+# GPU Configuration
+gpu_enabled      = true
+instance_type    = "g4dn.xlarge"  # 1x NVIDIA T4 GPU
+desired_capacity = 1
+min_size         = 1
+max_size         = 3
+
+# Application Environment Variables
+openai_api_key = "sk-..."  # Your OpenAI API key
+gemini_api_key = ""        # Optional: Gemini API key
+backend_url    = "https://your-backend-url.com"  # Your Fabrikator backend URL
+
+# Health Check Configuration
+health_check_path     = "/health"
+health_check_interval = 30
+
+# Auto-scaling Configuration
+enable_autoscaling = true
+cpu_threshold      = 70
+memory_threshold   = 80
