@@ -18,6 +18,7 @@ env:
   AWS_REGION: us-east-1
   ECS_CLUSTER: forge-vision-cluster
   ECS_SERVICE: vision-validator
+  ECS_TASK_DEFINITION: production-vision-validator
   ECR_REPOSITORY: production-forge-vision
 
 jobs:
@@ -69,7 +70,7 @@ jobs:
         run: |
           # Get current task definition
           TASK_DEFINITION=$(aws ecs describe-task-definition \
-            --task-definition ${ECS_SERVICE} \
+            --task-definition ${ECS_TASK_DEFINITION} \
             --query 'taskDefinition' \
             --output json)
 
