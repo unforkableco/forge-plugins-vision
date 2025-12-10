@@ -1,0 +1,112 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+
+env:
+  TF_VERSION: '1.6.0'
+  AWS_REGION: 'us-east-1'
+
+jobs:
+  terraform:
+    name: Terraform Plan/Apply
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Generate terraform.tfvars from GitHub Secrets
+        working-directory: ./terraform
+        run: |
+          cat > terraform.tfvars <<EOF
+          # Auto-generated from GitHub Secrets - DO NOT COMMIT
+          environment = "${{ github.event.inputs.environment || 'production' }}"
+          aws_region  = "${{ env.AWS_REGION }}"
+          
+          # Networking Configuration
+          vpc_cidr            = "${{ secrets.TF_VPC_CIDR }}"
+          availability_zones  = ["${{ secrets.TF_AVAILABILITY_ZONES }}"]
+          public_subnets      = ["${{ secrets.TF_PUBLIC_SUBNETS }}"]
+          private_subnets     = ["${{ secrets.TF_PRIVATE_SUBNETS }}"]
+          allowed_cidr_blocks = ["${{ secrets.TF_ALLOWED_CIDR_BLOCKS }}"]
+          
+          # ECS Cluster Configuration
+          cluster_name = "${{ secrets.TF_CLUSTER_NAME }}"
+          service_name = "${{ secrets.TF_SERVICE_NAME }}"
+          
+          # Container Configuration
+          container_image  = "${{ secrets.TF_CONTAINER_IMAGE }}"
+          container_port   = ${{ secrets.TF_CONTAINER_PORT }}
+          container_cpu    = ${{ secrets.TF_CONTAINER_CPU }}
+          container_memory = ${{ secrets.TF_CONTAINER_MEMORY }}
+          
+          # GPU Configuration
+          gpu_enabled      = ${{ secrets.TF_GPU_ENABLED }}
+          instance_type    = "${{ secrets.TF_INSTANCE_TYPE }}"
+          desired_capacity = ${{ secrets.TF_DESIRED_CAPACITY }}
+          min_size         = ${{ secrets.TF_MIN_SIZE }}
+          max_size         = ${{ secrets.TF_MAX_SIZE }}
+          
+          # Application Environment Variables (Sensitive)
+          api_key        = "${{ secrets.TF_API_KEY }}"
+          openai_api_key = "${{ secrets.TF_OPENAI_API_KEY }}"
+          gemini_api_key = "${{ secrets.TF_GEMINI_API_KEY }}"
+          backend_api_key = "${{ secrets.TF_BACKEND_API_KEY }}"
+          
+          # Health Check Configuration
+          health_check_path     = "${{ secrets.TF_HEALTH_CHECK_PATH }}"
+          health_check_interval = ${{ secrets.TF_HEALTH_CHECK_INTERVAL }}
+          
+          # Auto-scaling Configuration
+          enable_autoscaling = ${{ secrets.TF_ENABLE_AUTOSCALING }}
+          cpu_threshold      = ${{ secrets.TF_CPU_THRESHOLD }}
+          memory_threshold   = ${{ secrets.TF_MEMORY_THRESHOLD }}
+          EOF
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Plan Output
+        if: github.event_name == 'push'
+        working-directory: ./terraform
+        run: terraform show -no-color tfplan
+
