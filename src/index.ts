@@ -359,7 +359,7 @@ async function callGeminiVision(
     });
   }
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
   const response = await fetch(url, {
     method: 'POST',
     headers: {
