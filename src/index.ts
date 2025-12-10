@@ -38,6 +38,7 @@ const PORT = process.env.PORT || 8080;
 const WORK_DIR = process.env.WORK_DIR || '/tmp/vision-validate';
 const BLENDER_PATH = process.env.BLENDER_PATH || 'blender';
 const API_KEY = process.env.API_KEY;
+const BACKEND_API_KEY = process.env.BACKEND_API_KEY;
 
 // Ensure work directory exists
 if (!fs.existsSync(WORK_DIR)) {
@@ -92,7 +93,7 @@ interface ValidationRequest {
     projectId?: string;
     accountId: string;
     step: number;
-    artifactsUrl?: string;
+    artifact3mfUrl: string;  // Direct URL to 3MF file
   };
   args: {
     part: string;
@@ -123,20 +124,26 @@ interface PluginResult {
 
 /**
  * Fetch 3MF file from artifacts storage
+ * @param artifact3mfUrl - Direct URL to 3MF file
+ * @param sessionId - Session ID for local file storage
  */
 async function fetch3mfFile(
-  artifactsUrl: string, 
-  sessionId: string, 
-  partName: string
+  artifact3mfUrl: string,
+  sessionId: string
 ): Promise<string | null> {
-  // Construct path to 3MF file
-  const fileName = partName === 'assembly' ? 'assembly.3mf' : `part_${partName}.3mf`;
-  const url = `${artifactsUrl}/out/${fileName}`;
+  const fileName = path.basename(new URL(artifact3mfUrl).pathname);
 
-  console.log(`Fetching 3MF from: ${url}`);
+  console.log(`Fetching 3MF from: ${artifact3mfUrl}`);
 
   try {
-    const response = await fetch(url);
+    // Add authentication headers if backend API key is configured
+    const headers: Record<string, string> = {};
+    if (BACKEND_API_KEY) {
+      headers['X-API-Key'] = BACKEND_API_KEY;
+      headers['Authorization'] = `Bearer ${BACKEND_API_KEY}`;
+    }
+
+    const response = await fetch(artifact3mfUrl, { headers });
     if (!response.ok) {
       console.error(`Failed to fetch 3MF: ${response.status}`);
       return null;
@@ -405,10 +412,10 @@ app.post('/validate', async (req, res) => {
 
   try {
     const { part, partDescription, focus, checks } = body.args || {};
-    const { sessionId, artifactsUrl, step } = body.context || {};
+    const { sessionId, artifact3mfUrl, step } = body.context || {};
 
     console.log('[vision_validate] Extracted args:', { part, partDescription, focus, checks });
-    console.log('[vision_validate] Extracted context:', { sessionId, artifactsUrl, step });
+    console.log('[vision_validate] Extracted context:', { sessionId, artifact3mfUrl, step });
 
     if (!part) {
       const result: PluginResult = {
@@ -424,17 +431,17 @@ app.post('/validate', async (req, res) => {
     console.log(`[vision_validate] session=${sessionId} part=${part} step=${step}`);
 
     // Step 1: Fetch 3MF
-    if (!artifactsUrl) {
+    if (!artifact3mfUrl) {
       return res.json({
         ok: false,
         tokensUsed: 0,
         artifacts: [],
-        result: JSON.stringify({ error: 'artifactsUrl not provided' }),
-        error: 'artifactsUrl not provided'
+        result: JSON.stringify({ error: 'artifact3mfUrl is required' }),
+        error: 'artifact3mfUrl is required'
       });
     }
 
-    const model3mfPath = await fetch3mfFile(artifactsUrl, sessionId, part);
+    const model3mfPath = await fetch3mfFile(artifact3mfUrl, sessionId);
     if (!model3mfPath) {
       return res.json({
         ok: false,
