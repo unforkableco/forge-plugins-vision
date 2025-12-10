@@ -122,6 +122,14 @@ interface PluginResult {
   error?: string;
 }
 
+interface Fetch3mfResult {
+  success: boolean;
+  localPath?: string;
+  error?: string;
+  url: string;
+  statusCode?: number;
+}
+
 /**
  * Fetch 3MF file from artifacts storage
  * @param artifact3mfUrl - Direct URL to 3MF file
@@ -130,12 +138,12 @@ interface PluginResult {
 async function fetch3mfFile(
   artifact3mfUrl: string,
   sessionId: string
-): Promise<string | null> {
-  const fileName = path.basename(new URL(artifact3mfUrl).pathname);
-
+): Promise<Fetch3mfResult> {
   console.log(`Fetching 3MF from: ${artifact3mfUrl}`);
 
   try {
+    const fileName = path.basename(new URL(artifact3mfUrl).pathname);
+
     // Add authentication headers if backend API key is configured
     const headers: Record<string, string> = {};
     if (BACKEND_API_KEY) {
@@ -146,7 +154,12 @@ async function fetch3mfFile(
     const response = await fetch(artifact3mfUrl, { headers });
     if (!response.ok) {
       console.error(`Failed to fetch 3MF: ${response.status}`);
-      return null;
+      return {
+        success: false,
+        error: `HTTP ${response.status} ${response.statusText}`,
+        url: artifact3mfUrl,
+        statusCode: response.status
+      };
     }
 
     const buffer = await response.buffer();
@@ -155,10 +168,14 @@ async function fetch3mfFile(
     fs.mkdirSync(path.dirname(localPath), { recursive: true });
     fs.writeFileSync(localPath, buffer);
     
-    return localPath;
+    return { success: true, localPath, url: artifact3mfUrl };
   } catch (error: any) {
     console.error(`Error fetching 3MF: ${error.message}`);
-    return null;
+    return {
+      success: false,
+      error: error.message,
+      url: artifact3mfUrl
+    };
   }
 }
 
@@ -441,23 +458,28 @@ app.post('/validate', async (req, res) => {
       });
     }
 
-    const model3mfPath = await fetch3mfFile(artifact3mfUrl, sessionId);
-    if (!model3mfPath) {
+    const fetchResult = await fetch3mfFile(artifact3mfUrl, sessionId);
+    if (!fetchResult.success) {
+      const errorDetail = fetchResult.statusCode 
+        ? `Failed to fetch 3MF: ${fetchResult.error} from ${fetchResult.url}`
+        : `Failed to fetch 3MF: ${fetchResult.error} from ${fetchResult.url}`;
       return res.json({
         ok: false,
         tokensUsed: 0,
         artifacts: [],
         result: JSON.stringify({ 
           verdict: 'error',
-          error: '3MF file not found' 
+          error: errorDetail,
+          url: fetchResult.url,
+          statusCode: fetchResult.statusCode
         }),
-        error: '3MF file not found'
+        error: errorDetail
       });
     }
 
     // Step 2: Render with Blender
     const outputDir = path.join(WORK_DIR, sessionId, `render_${Date.now()}`);
-    const renderResult = await renderWithBlender(model3mfPath, outputDir);
+    const renderResult = await renderWithBlender(fetchResult.localPath!, outputDir);
 
     if (!renderResult.success || renderResult.images.length === 0) {
       return res.json({
