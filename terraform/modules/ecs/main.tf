@@ -120,12 +120,14 @@ resource "aws_ecs_task_definition" "main" {
           {
             name  = "API_KEY"
             value = var.api_key
-          },
-          {
-            name  = "BACKEND_URL"
-            value = var.backend_url
           }
         ],
+        var.backend_api_key != "" ? [
+          {
+            name  = "BACKEND_API_KEY"
+            value = var.backend_api_key
+          }
+        ] : [],
         var.openai_api_key != "" ? [
           {
             name  = "OPENAI_API_KEY"
@@ -149,8 +151,12 @@ resource "aws_ecs_task_definition" "main" {
       ] : []
 
       # Enable Docker GPU runtime
+      # Device mappings are conditional based on GPU type:
+      # - NVIDIA (g4dn, g6f): /dev/nvidia0, /dev/nvidiactl, /dev/nvidia-uvm
+      # - AMD (g4ad): /dev/kfd, /dev/dri/* (handled automatically by container)
+      # The container auto-detects GPU type, so device mappings are optional
       linuxParameters = var.gpu_enabled ? {
-        devices = [
+        devices = length(regexall("^(g4dn|g6f)", var.instance_type)) > 0 ? [
           {
             hostPath      = "/dev/nvidia0"
             containerPath = "/dev/nvidia0"
@@ -166,7 +172,7 @@ resource "aws_ecs_task_definition" "main" {
             containerPath = "/dev/nvidia-uvm"
             permissions   = ["read", "write", "mknod"]
           }
-        ]
+        ] : []  # AMD GPUs don't need explicit device mappings - container auto-detects
         capabilities = {
           add = ["SYS_ADMIN"]
         }
@@ -205,6 +211,7 @@ resource "aws_lb" "main" {
   subnets            = var.public_subnets
 
   enable_deletion_protection = false
+  idle_timeout               = 300  # 5 minutes for long-running vision analysis
 
   tags = {
     Name = "${var.environment}-forge-vision-alb"
@@ -252,15 +259,21 @@ resource "aws_lb_listener" "main" {
 # Data source for current region
 data "aws_region" "current" {}
 
-# Data source for ECS-optimized AMI with GPU support
+# Data source for ECS-optimized AMI (GPU or regular based on configuration)
 data "aws_ssm_parameter" "ecs_gpu_ami" {
-  name = "/aws/service/ecs/optimized-ami/amazon-linux-2/gpu/recommended/image_id"
+  count = var.gpu_enabled ? 1 : 0
+  name  = "/aws/service/ecs/optimized-ami/amazon-linux-2/gpu/recommended/image_id"
+}
+
+data "aws_ssm_parameter" "ecs_ami" {
+  count = var.gpu_enabled ? 0 : 1
+  name  = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
 }
 
 # Launch Template for EC2 instances
 resource "aws_launch_template" "ecs" {
   name_prefix   = "${var.environment}-forge-vision-"
-  image_id      = data.aws_ssm_parameter.ecs_gpu_ami.value
+  image_id      = var.gpu_enabled ? data.aws_ssm_parameter.ecs_gpu_ami[0].value : data.aws_ssm_parameter.ecs_ami[0].value
   instance_type = var.instance_type
 
   vpc_security_group_ids = [var.ecs_security_group_id]
@@ -283,7 +296,7 @@ resource "aws_launch_template" "ecs" {
   user_data = base64encode(<<-EOF
     #!/bin/bash
     echo ECS_CLUSTER=${aws_ecs_cluster.main.name} >> /etc/ecs/ecs.config
-    echo ECS_ENABLE_GPU_SUPPORT=true >> /etc/ecs/ecs.config
+    ${var.gpu_enabled ? "echo ECS_ENABLE_GPU_SUPPORT=true >> /etc/ecs/ecs.config" : ""}
     echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config
     echo ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true >> /etc/ecs/ecs.config
   EOF
@@ -428,10 +441,8 @@ resource "aws_ecs_service" "main" {
     container_port   = var.container_port
   }
 
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
-  }
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
 
   depends_on = [
     aws_lb_listener.main,
