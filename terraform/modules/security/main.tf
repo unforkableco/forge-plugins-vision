@@ -44,9 +44,9 @@ resource "aws_security_group" "ecs" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "Container port from ALB"
-    from_port       = 8080
-    to_port         = 8080
+    description     = "Dynamic port range from ALB (ECS uses dynamic port mapping)"
+    from_port       = 32768
+    to_port         = 65535
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }

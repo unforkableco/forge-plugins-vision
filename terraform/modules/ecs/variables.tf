@@ -76,9 +76,11 @@ variable "gemini_api_key" {
   sensitive   = true
 }
 
-variable "backend_url" {
-  description = "Backend URL for artifact fetching"
+variable "backend_api_key" {
+  description = "API key for authenticating requests to the backend (optional)"
   type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "vpc_id" {

@@ -11,11 +11,9 @@ Internet
 Application Load Balancer (ALB)
     │
     ▼
-ECS Service (on EC2 with NVIDIA T4 GPUs)
+ECS Service (on EC2 with NVIDIA L4 GPU - g6f.xlarge)
     │
-    ├─ Task 1: vision-validator container
-    ├─ Task 2: vision-validator container
-    └─ Task N: vision-validator container
+    └─ Task: vision-validator container
 ```
 
 ### Components
@@ -23,7 +21,7 @@ ECS Service (on EC2 with NVIDIA T4 GPUs)
 - **VPC**: Isolated network with public/private subnets across 2 AZs
 - **Application Load Balancer**: Distributes traffic to ECS tasks
 - **ECS Cluster**: Managed container orchestration
-- **EC2 Auto Scaling Group**: GPU-enabled instances (g4dn family)
+- **EC2 Auto Scaling Group**: GPU-enabled instances (g6f family - fractional NVIDIA L4)
 - **ECS Capacity Provider**: Auto-scales instances based on task demand
 - **CloudWatch**: Logging and monitoring
 
@@ -34,19 +32,119 @@ ECS Service (on EC2 with NVIDIA T4 GPUs)
 3. **AWS CLI** configured with credentials
 4. **Docker image** pushed to GitHub Container Registry
 
+## Configuration Methods
+
+### Method 1: Local Development (Recommended for Testing)
+
+Use a local `terraform.tfvars` file (already gitignored):
+
+1. **Copy the example file:**
+   ```bash
+   cd terraform
+   cp terraform.tfvars.example terraform.tfvars
+   ```
+
+2. **Edit `terraform.tfvars` with your values:**
+   ```hcl
+   api_key        = "your-secure-api-key-here"
+   openai_api_key = "sk-..."
+   # ... etc
+   ```
+
+3. **Run Terraform:**
+   ```bash
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+**Note**: `terraform.tfvars` is already in `.gitignore` and will not be committed.
+
+### Method 2: Environment Variables (Alternative for Local)
+
+Use the helper script to generate `terraform.tfvars` from environment variables:
+
+1. **Set required environment variables:**
+   ```bash
+   export TF_API_KEY="your-api-key"
+   export TF_BACKEND_URL="https://your-backend-url.com"
+   export TF_OPENAI_API_KEY="sk-..."
+   # ... set other variables as needed
+   ```
+
+2. **Generate terraform.tfvars:**
+   ```bash
+   chmod +x scripts/generate-tfvars-from-env.sh
+   ./scripts/generate-tfvars-from-env.sh
+   ```
+
+3. **Run Terraform:**
+   ```bash
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+### Method 3: GitHub Actions (CI/CD)
+
+Use GitHub Secrets for automated deployments:
+
+1. **Set up GitHub Secrets** in your repository:
+   - Go to: Settings → Secrets and variables → Actions
+   - Add the following secrets (prefix with `TF_`):
+     - `TF_API_KEY` - API key for vision service
+     - `TF_OPENAI_API_KEY` - OpenAI API key
+     - `TF_GEMINI_API_KEY` - (Optional) Gemini API key
+     - `TF_BACKEND_API_KEY` - (Optional) Backend API key
+     - `TF_VPC_CIDR` - VPC CIDR block
+     - `TF_AVAILABILITY_ZONES` - Comma-separated AZs (e.g., "us-east-1a,us-east-1b")
+     - `TF_PUBLIC_SUBNETS` - Comma-separated public subnets
+     - `TF_PRIVATE_SUBNETS` - Comma-separated private subnets
+     - `TF_ALLOWED_CIDR_BLOCKS` - Comma-separated allowed CIDR blocks
+     - `TF_CLUSTER_NAME` - ECS cluster name
+     - `TF_SERVICE_NAME` - ECS service name
+     - `TF_CONTAINER_IMAGE` - Docker image URL
+     - `TF_INSTANCE_TYPE` - EC2 instance type (default: g6f.xlarge)
+     - `AWS_ROLE_ARN` - AWS IAM role ARN for GitHub Actions
+     - And other configuration values as needed
+
+2. **Deploy via GitHub Actions:**
+   - Go to: Actions → Terraform Deploy → Run workflow
+   - Select environment (production/staging)
+   - Click "Run workflow"
+
+The workflow will:
+- Generate `terraform.tfvars` from secrets
+- Run `terraform plan`
+- If triggered manually, run `terraform apply`
+
+## Required Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `api_key` | **Yes** | API key for authenticating requests TO the vision service |
+| `openai_api_key` or `gemini_api_key` | **Yes*** | Vision AI API key (one required) |
+| `backend_api_key` | No | API key for authenticating requests FROM vision service TO backend |
+
+**Note**: `backend_url` is NOT needed. The artifacts URL is provided by the Fabrikator backend in each request's `context.artifactsUrl` field.
+
+*One of `openai_api_key` or `gemini_api_key` is required.
+
 ## GPU Instance Types
 
 | Instance Type | GPUs | GPU Type | vCPUs | RAM | Price/hr (us-east-1) |
 |--------------|------|----------|-------|-----|----------------------|
+| **g6f.xlarge** (default) | 1/8 | NVIDIA L4 | 4 | 16 GB | ~$0.30-0.35 |
+| g6f.2xlarge | 1/4 | NVIDIA L4 | 8 | 32 GB | ~$0.60-0.70 |
+| g6f.4xlarge | 1/2 | NVIDIA L4 | 16 | 64 GB | ~$1.20-1.40 |
+| g4ad.xlarge | 1 | AMD Radeon Pro V520 | 4 | 16 GB | ~$0.378 |
 | g4dn.xlarge | 1 | NVIDIA T4 | 4 | 16 GB | ~$0.526 |
-| g4dn.2xlarge | 1 | NVIDIA T4 | 8 | 32 GB | ~$0.752 |
-| g4dn.4xlarge | 1 | NVIDIA T4 | 16 | 64 GB | ~$1.204 |
-| g4dn.12xlarge | 4 | NVIDIA T4 | 48 | 192 GB | ~$3.912 |
 
 ## Quick Start
 
 ### 1. Configure Variables
 
+**For local development:**
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
@@ -58,8 +156,7 @@ cp terraform.tfvars.example terraform.tfvars
 - `openai_api_key` or `gemini_api_key`: Required for AI analysis
 - `backend_url`: Your Fabrikator backend URL
 - `allowed_cidr_blocks`: Restrict access to your IP ranges
-- `instance_type`: Choose GPU instance size
-- `desired_capacity`: Number of instances to run
+- `instance_type`: Choose GPU instance size (default: g6f.xlarge)
 
 ### 2. Initialize Terraform
 
@@ -73,178 +170,55 @@ terraform init
 terraform plan
 ```
 
-Review the resources that will be created.
-
-### 4. Deploy
+### 4. Apply Configuration
 
 ```bash
 terraform apply
 ```
 
-Type `yes` to confirm.
+## Outputs
 
-### 5. Get Outputs
+After deployment, Terraform will output:
 
-```bash
-terraform output
-```
+- `alb_url` - Application Load Balancer URL
+- `health_check_url` - Health check endpoint
+- `validation_endpoint` - Vision validation endpoint
+- `ecs_cluster_name` - ECS cluster name
+- `deployment_info` - Deployment configuration details
 
-You'll see:
-- `alb_url`: Load balancer URL
-- `health_check_url`: Health check endpoint
-- `validation_endpoint`: Vision validation endpoint
+## Security Notes
 
-## Usage
-
-### Test Health Check
-
-```bash
-curl http://<alb_dns_name>/health
-```
-
-### Test Vision Validation
-
-```bash
-# Note: Include your API key in the request
-curl -X POST http://<alb_dns_name>/validate \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
-  -d '{
-    "context": {
-      "sessionId": "test-123",
-      "artifactsUrl": "https://...",
-      "step": 1
-    },
-    "args": {
-      "part": "base",
-      "partDescription": "A cylindrical base"
-    }
-  }'
-```
-
-**Authentication:**
-- All requests (except `/health`) require an API key
-- Pass via `X-API-Key` header or `Authorization: Bearer <key>`
-- The API key is set via the `api_key` Terraform variable
-
-## Cost Estimation
-
-**Monthly costs** (approximate, us-east-1):
-
-| Component | Configuration | Monthly Cost |
-|-----------|--------------|--------------|
-| EC2 (g4dn.xlarge) | 1 instance, 24/7 | ~$380 |
-| ALB | Standard | ~$20 |
-| Data Transfer | 100 GB/month | ~$9 |
-| CloudWatch Logs | 10 GB/month | ~$5 |
-| **Total** | | **~$414/month** |
-
-**Cost optimization tips:**
-- Use spot instances (50-90% discount) - add to launch template
-- Stop instances during off-hours
-- Use smaller instance types for dev/staging
-- Enable auto-scaling to scale down during low usage
-
-## Monitoring
-
-### CloudWatch Logs
-
-Logs are available at:
-```
-/ecs/production/vision-validator
-```
-
-View in AWS Console:
-```bash
-aws logs tail /ecs/production/vision-validator --follow
-```
-
-### ECS Metrics
-
-Monitor in CloudWatch:
-- CPU utilization
-- Memory utilization
-- Task count
-- GPU utilization (via CloudWatch Agent)
-
-## Auto-Scaling
-
-The service auto-scales based on:
-- **CPU threshold**: 70% (adjustable)
-- **Memory threshold**: 80% (adjustable)
-
-Scaling behavior:
-- **Scale out**: When metrics exceed threshold for 1 minute
-- **Scale in**: When metrics drop below threshold for 5 minutes
-
-## Updating the Deployment
-
-### Update Container Image
-
-```bash
-# Update image tag in terraform.tfvars
-container_image = "ghcr.io/unforkableco/forge-plugins-vision:v1.1.0"
-
-# Apply changes
-terraform apply
-```
-
-ECS will perform a rolling update with zero downtime.
-
-### Update Infrastructure
-
-```bash
-# Modify terraform files or variables
-terraform apply
-```
-
-## State Management
-
-For production, use S3 backend for state management:
-
-```hcl
-# Uncomment in main.tf
-terraform {
-  backend "s3" {
-    bucket         = "your-terraform-state-bucket"
-    key            = "forge-plugins-vision/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "terraform-state-lock"
-  }
-}
-```
-
-Then initialize:
-```bash
-terraform init -migrate-state
-```
+- **Never commit `terraform.tfvars`** - It's already in `.gitignore`
+- **Use GitHub Secrets** for CI/CD deployments
+- **Restrict `allowed_cidr_blocks`** in production (don't use `0.0.0.0/0`)
+- **Generate strong API keys** using `openssl rand -base64 32`
+- **Rotate API keys** regularly
 
 ## Troubleshooting
 
-### ECS Tasks Not Starting
+### Terraform can't find variables
 
-Check:
-1. Task logs in CloudWatch
-2. Container health check is passing
-3. Security groups allow traffic
-4. Task has enough CPU/memory
-5. GPU is available on instance
+- Ensure `terraform.tfvars` exists in the `terraform/` directory
+- Check that all required variables are set
+- Verify variable names match exactly (case-sensitive)
 
-### GPU Not Detected
+### GitHub Actions fails
 
-Check:
-1. Instance type is g4dn family
-2. ECS-optimized GPU AMI is being used
-3. User data script enables GPU support
-4. NVIDIA drivers are installed (pre-installed in GPU AMI)
+- Verify all required secrets are set in GitHub
+- Check AWS credentials/role ARN is correct
+- Review workflow logs for specific errors
 
-### High Costs
+### Container can't access GPU
 
-1. Check instance count: `terraform show | grep desired_capacity`
-2. Verify auto-scaling isn't scaling out unnecessarily
-3. Consider using spot instances
-4. Scale down instance size if underutilized
+- Verify instance type supports GPU (g6f, g4dn, g4ad families)
+- Check CloudWatch logs for GPU detection messages
+- Ensure ECS GPU AMI is being used
+
+## Cost Optimization
+
+- **Current setup**: Single `g6f.xlarge` instance (~$216-252/month)
+- **No auto-scaling**: Fixed at 1 instance to minimize costs
+- **Fractional GPU**: Uses 1/8 NVIDIA L4 GPU (sufficient for Blender rendering)
 
 ## Cleanup
 
@@ -254,33 +228,4 @@ To destroy all resources:
 terraform destroy
 ```
 
-**Warning**: This will delete:
-- All EC2 instances
-- Load balancer
-- ECS cluster
-- VPC and networking
-- All data and logs
-
-## Security Best Practices
-
-1. **Restrict ALB access**: Update `allowed_cidr_blocks` to your IP ranges
-2. **Use HTTPS**: Add ACM certificate and HTTPS listener to ALB
-3. **Enable encryption**: EBS volumes are encrypted by default
-4. **Secrets management**: Store API keys in AWS Secrets Manager
-5. **VPC endpoints**: Add VPC endpoints for ECR, CloudWatch to avoid NAT costs
-
-## CI/CD Integration
-
-See `.github/workflows/deploy-aws.yml` for automated deployment on release.
-
-## Support
-
-For issues with:
-- **Terraform**: Check AWS CloudFormation events
-- **ECS**: Check ECS task logs and events
-- **Container**: Check CloudWatch logs
-- **GPU**: Check nvidia-smi output in container logs
-
-## License
-
-MIT License - see [LICENSE](../LICENSE) for details.
+**Warning**: This will delete all infrastructure including the ECS cluster, ALB, and VPC.

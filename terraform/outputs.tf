@@ -78,12 +78,12 @@ output "validation_endpoint" {
 output "deployment_info" {
   description = "Deployment information"
   value = {
-    region              = var.aws_region
-    environment         = var.environment
-    cluster_name        = var.cluster_name
-    service_name        = var.service_name
-    instance_type       = var.instance_type
-    gpu_enabled         = var.gpu_enabled
-    desired_capacity    = var.desired_capacity
+    region           = var.aws_region
+    environment      = var.environment
+    cluster_name     = var.cluster_name
+    service_name     = var.service_name
+    instance_type    = var.instance_type
+    gpu_enabled      = var.gpu_enabled
+    desired_capacity = var.desired_capacity
   }
 }

@@ -1,4 +1,9 @@
 # Copy this file to terraform.tfvars and fill in your values
+# 
+# NOTE: terraform.tfvars is gitignored and will NOT be committed
+# 
+# For CI/CD deployments, use GitHub Secrets (see GITHUB_SECRETS.md)
+# For local development, use this file or environment variables (see README.md)
 
 # General Configuration
 environment = "production"
@@ -21,18 +26,20 @@ container_port   = 8080
 container_cpu    = 2048
 container_memory = 8192
 
-# GPU Configuration
-gpu_enabled      = true
-instance_type    = "g4dn.xlarge"  # 1x NVIDIA T4 GPU
+# GPU Configuration (DISABLED - using CPU rendering)
+gpu_enabled      = false
+instance_type    = "t3.xlarge"  # 4 vCPU, 16GB RAM, ~$0.1664/hr (~$120/month) - CPU rendering
+# Single instance for cost optimization - no auto-scaling
 desired_capacity = 1
 min_size         = 1
-max_size         = 3
+max_size         = 1
 
 # Application Environment Variables
-api_key        = "your-secure-api-key-here"  # REQUIRED: API key for authenticating requests (generate a strong random key)
+api_key        = "your-secure-api-key-here"  # REQUIRED: API key for authenticating requests TO the vision service (generate with: openssl rand -base64 32)
 openai_api_key = "sk-..."                    # Your OpenAI API key
 gemini_api_key = ""                          # Optional: Gemini API key
-backend_url    = "https://your-backend-url.com"  # Your Fabrikator backend URL
+backend_api_key = ""                         # Optional: API key for authenticating requests FROM vision service TO backend (only needed if backend requires auth)
+# Note: backend_url is NOT needed - the artifacts URL comes from the request body sent by Fabrikator
 
 # Health Check Configuration
 health_check_path     = "/health"

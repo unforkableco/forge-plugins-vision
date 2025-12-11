@@ -42,10 +42,10 @@ data "aws_region" "current" {}
 module "networking" {
   source = "./modules/networking"
 
-  environment    = var.environment
-  vpc_cidr       = var.vpc_cidr
-  azs            = var.availability_zones
-  public_subnets = var.public_subnets
+  environment     = var.environment
+  vpc_cidr        = var.vpc_cidr
+  azs             = var.availability_zones
+  public_subnets  = var.public_subnets
   private_subnets = var.private_subnets
 }
 
@@ -53,8 +53,8 @@ module "networking" {
 module "security" {
   source = "./modules/security"
 
-  environment = var.environment
-  vpc_id      = module.networking.vpc_id
+  environment         = var.environment
+  vpc_id              = module.networking.vpc_id
   allowed_cidr_blocks = var.allowed_cidr_blocks
 }
 
@@ -62,42 +62,42 @@ module "security" {
 module "ecs" {
   source = "./modules/ecs"
 
-  environment         = var.environment
-  cluster_name        = var.cluster_name
-  service_name        = var.service_name
+  environment  = var.environment
+  cluster_name = var.cluster_name
+  service_name = var.service_name
 
   # Container configuration
-  container_image     = var.container_image
-  container_port      = var.container_port
-  container_cpu       = var.container_cpu
-  container_memory    = var.container_memory
+  container_image  = var.container_image
+  container_port   = var.container_port
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
 
   # GPU configuration
-  gpu_enabled         = var.gpu_enabled
-  instance_type       = var.instance_type
-  desired_capacity    = var.desired_capacity
-  min_size            = var.min_size
-  max_size            = var.max_size
+  gpu_enabled      = var.gpu_enabled
+  instance_type    = var.instance_type
+  desired_capacity = var.desired_capacity
+  min_size         = var.min_size
+  max_size         = var.max_size
 
   # Environment variables
-  api_key             = var.api_key
-  openai_api_key      = var.openai_api_key
-  gemini_api_key      = var.gemini_api_key
-  backend_url         = var.backend_url
+  api_key         = var.api_key
+  openai_api_key  = var.openai_api_key
+  gemini_api_key  = var.gemini_api_key
+  backend_api_key = var.backend_api_key
 
   # Networking
-  vpc_id              = module.networking.vpc_id
-  private_subnets     = module.networking.private_subnet_ids
-  public_subnets      = module.networking.public_subnet_ids
+  vpc_id                = module.networking.vpc_id
+  private_subnets       = module.networking.private_subnet_ids
+  public_subnets        = module.networking.public_subnet_ids
   alb_security_group_id = module.security.alb_security_group_id
   ecs_security_group_id = module.security.ecs_security_group_id
 
   # Health check
-  health_check_path   = var.health_check_path
+  health_check_path     = var.health_check_path
   health_check_interval = var.health_check_interval
 
   # Auto-scaling
-  enable_autoscaling  = var.enable_autoscaling
-  cpu_threshold       = var.cpu_threshold
-  memory_threshold    = var.memory_threshold
+  enable_autoscaling = var.enable_autoscaling
+  cpu_threshold      = var.cpu_threshold
+  memory_threshold   = var.memory_threshold
 }

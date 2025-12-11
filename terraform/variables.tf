@@ -39,7 +39,7 @@ variable "private_subnets" {
 variable "allowed_cidr_blocks" {
   description = "CIDR blocks allowed to access the ALB"
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # Restrict this in production
+  default     = ["0.0.0.0/0"] # Restrict this in production
 }
 
 # ECS Cluster Configuration
@@ -71,13 +71,13 @@ variable "container_port" {
 variable "container_cpu" {
   description = "CPU units for the container (1024 = 1 vCPU)"
   type        = number
-  default     = 2048  # 2 vCPUs
+  default     = 2048 # 2 vCPUs
 }
 
 variable "container_memory" {
   description = "Memory for the container in MB"
   type        = number
-  default     = 8192  # 8 GB
+  default     = 8192 # 8 GB
 }
 
 # GPU Configuration
@@ -88,17 +88,21 @@ variable "gpu_enabled" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (use g4dn family for NVIDIA T4 GPUs)"
+  description = "EC2 instance type (CPU instance for cost-effective rendering)"
   type        = string
-  default     = "g4dn.xlarge"  # 1x NVIDIA T4, 4 vCPU, 16GB RAM
-  # Other options:
-  # g4dn.2xlarge  - 1x T4, 8 vCPU, 32GB RAM
-  # g4dn.4xlarge  - 1x T4, 16 vCPU, 64GB RAM
-  # g4dn.12xlarge - 4x T4, 48 vCPU, 192GB RAM
+  default     = "t3.xlarge" # 4 vCPU, 16GB RAM, ~$0.1664/hr (~$120/month) - CPU rendering
+  # CPU instance options (cost-effective):
+  # t3.xlarge   - 4 vCPU, 16GB RAM, ~$0.1664/hr (~$120/month) - recommended for CPU rendering
+  # t3.2xlarge  - 8 vCPU, 32GB RAM, ~$0.3328/hr (~$240/month)
+  # m5.xlarge   - 4 vCPU, 16GB RAM, ~$0.192/hr (~$138/month) - better performance than t3
+  # m5.2xlarge  - 8 vCPU, 32GB RAM, ~$0.384/hr (~$277/month)
+  # GPU options (for reference - currently disabled):
+  # g6f.xlarge  - 1/8 NVIDIA L4, 4 vCPU, 16GB RAM, ~$0.30-0.35/hr
+  # g4dn.xlarge - 1x NVIDIA T4, 4 vCPU, 16GB RAM, ~$0.526/hr
 }
 
 variable "desired_capacity" {
-  description = "Desired number of EC2 instances"
+  description = "Desired number of EC2 instances (single instance for cost optimization)"
   type        = number
   default     = 1
 }
@@ -112,7 +116,7 @@ variable "min_size" {
 variable "max_size" {
   description = "Maximum number of EC2 instances"
   type        = number
-  default     = 3
+  default     = 1 # Single instance to minimize costs
 }
 
 # Application Environment Variables
@@ -136,9 +140,11 @@ variable "gemini_api_key" {
   default     = ""
 }
 
-variable "backend_url" {
-  description = "Fabrikator backend URL for artifact fetching"
+variable "backend_api_key" {
+  description = "API key for authenticating requests to the Fabrikator backend (optional - only needed if backend requires authentication)"
   type        = string
+  sensitive   = true
+  default     = ""
 }
 
 # Health Check Configuration
