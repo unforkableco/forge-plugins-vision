@@ -52,11 +52,29 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build and push with both SHA tag and latest
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          # Determine release tag when running from a GitHub Release event
+          RELEASE_TAG=""
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          fi
+
+          # Build once, tag with SHA + latest, and also release tag if present
+          TAGS="-t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          if [ -n "$RELEASE_TAG" ]; then
+            TAGS="$TAGS -t $ECR_REGISTRY/$ECR_REPOSITORY:$RELEASE_TAG"
+            echo "📦 Including release tag: $RELEASE_TAG"
+          else
+            echo "ℹ️ No release tag detected; skipping release tag push"
+          fi
+
+          docker build $TAGS .
+
+          # Push all tags we produced
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          if [ -n "$RELEASE_TAG" ]; then
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$RELEASE_TAG
+          fi
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Get latest image tag
