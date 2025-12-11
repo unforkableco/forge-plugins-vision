@@ -50,10 +50,10 @@ capabilities:
           
           ```
           call_plugin(
-            pluginSlug="vision-validator",
+            pluginSlug="forge-plugins-vision",
             toolName="vision_validate",
             args={
-              part: "base",  // Part name to validate
+              part: "part_headband",  // Full name as used in write_scad
               partDescription: "..."  // REQUIRED for single parts
             }
           )
