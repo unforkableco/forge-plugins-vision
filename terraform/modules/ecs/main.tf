@@ -442,7 +442,9 @@ resource "aws_ecs_service" "main" {
   }
 
   deployment_maximum_percent         = 200
-  deployment_minimum_healthy_percent = 100
+  # On single-instance rolling deploys, allow the old task to stop before starting the new one
+  # to avoid RESOURCE:MEMORY during replacement.
+  deployment_minimum_healthy_percent = 0
 
   depends_on = [
     aws_lb_listener.main,
