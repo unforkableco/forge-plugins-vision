@@ -426,10 +426,10 @@ def setup_render_settings(width=800, height=800, max_dim=1.0, device_type='CPU')
     # Configure device based on detection
     if device_type == 'CPU':
         scene.cycles.device = 'CPU'
-        scene.cycles.samples = 64    # CPU: moderate samples
+        scene.cycles.samples = 8     # CPU: reduced samples for faster renders
     else:
         scene.cycles.device = 'GPU'
-        scene.cycles.samples = 128   # GPU: can handle more samples for better quality
+        scene.cycles.samples = 128   # GPU: keep higher quality when available
 
     scene.cycles.use_denoising = False  # Keep edges sharp
     
