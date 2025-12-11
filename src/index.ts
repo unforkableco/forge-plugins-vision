@@ -518,11 +518,14 @@ app.post('/validate', async (req, res) => {
     const geminiKey = body.apiKeys?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
     let visionResult: { text: string; tokensUsed: number };
+    let visionProvider: 'gemini' | 'openai';
 
     if (geminiKey) {
       visionResult = await callGeminiVision(geminiKey, prompt, imageData);
+      visionProvider = 'gemini';
     } else if (openaiKey) {
       visionResult = await callOpenAIVision(openaiKey, prompt, imageData);
+      visionProvider = 'openai';
     } else {
       return res.json({
         ok: false,
@@ -534,6 +537,11 @@ app.post('/validate', async (req, res) => {
     }
 
     // Step 5: Parse response
+    console.log(
+      `[vision_validate] raw model response provider=${visionProvider} tokens=${visionResult.tokensUsed} ` +
+      `len=${visionResult.text?.length ?? 0}: ${visionResult.text?.slice(0, 1000) || '<empty>'}`
+    );
+
     const parsed = parseVisionResponse(visionResult.text);
 
     const result: PluginResult = {
