@@ -73,10 +73,11 @@ capabilities:
           
           **IMPORTANT:**
           - Vision validation CANNOT verify dimensions - it cannot measure from images
-          - Do NOT validate hardware.scad - hardware is visualization-only
-          - Validate all parts individually BEFORE validating assembly
+          - You can validate hardware.scad to make sure that you've placed the hardware correctly relative to each other. You should also validate assembly_all to make sure the hardware is properly integrated within it.
+          - Validate all parts individually BEFORE validating assembly and assembly_all.
           - If verdict is FAIL: fix the identified issues
-          - If verdict is UNCERTAIN: add more specific checks
+          - If verdict is UNCERTAIN: add more specific checks or ignore the result if you're confident enough in your own assessment.
+          - You can also use this tool to verify floating geometry, this is a common issue with SCAD files so be sure to check for it.
 
   tools:
     - name: vision_validate
