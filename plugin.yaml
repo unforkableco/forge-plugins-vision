@@ -50,52 +50,6 @@ capabilities:
         position: append
         priority: 60
         content: |
-          ## VISION VALIDATION PLUGIN
-          
-          Use vision validation to verify your geometry is correct:
-          
-          ```
-          call_plugin(
-            pluginSlug="forge-plugins-vision",
-            toolName="vision_validate",
-            args={
-              part: "part_headband",  // Full name as used in write_scad
-              partDescription: "..."  // REQUIRED for single parts
-            }
-          )
-          ```
-          
-          The plugin renders 5 views (ISO, Front, Right, Top, Bottom) and analyzes them.
-          
-          **How to write a good `partDescription`:**
-          1. **Overall shape**: Basic form (e.g., "90-degree elbow pipe", "cylindrical body with flange")
-          2. **Key features**: ALL geometric features present (e.g., "has external threading", "4 mounting holes")
-          3. **Connectivity**: How parts connect (e.g., "bend smoothly connects both legs")
-          4. **Hollow/internal**: Internal features (e.g., "hollow tube with 9mm inner diameter")
-          5. **Relative positions**: Feature locations (e.g., "flange near the bend")
-          
-          **Example good partDescription:**
-          `"90-degree elbow pipe where the bend smoothly connects both straight legs (no gaps). One leg is shorter and plain. The longer leg has external threading and a circular flange near the bend. The pipe is hollow throughout."`
-          
-          **IMPORTANT:**
-          - Vision validation CANNOT verify dimensions - it cannot measure from images
-          - You can validate hardware.scad to make sure that you've placed the hardware correctly relative to each other. You should also validate assembly_all to make sure the hardware is properly integrated within it.
-          - Validate all parts individually BEFORE validating assembly and assembly_all.
-          - If verdict is FAIL: fix the identified issues
-          - If verdict is UNCERTAIN: add more specific checks or ignore the result if you're confident enough in your own assessment.
-          - You can also use this tool to verify floating geometry, this is a common issue with SCAD files so be sure to check for it.
-          - **CRITICAL** All created files must be validated with this plugin, if you change a file, remember to validate it again.
-
-          CRITICAL RULES
-          - **Validation verdicts**:
-            * \`fail\` with **critical** issues → Must fix before proceeding
-            * \`warn\` with minor issues → Fix if practical, but **do NOT over-iterate** on micro-features (like sub-millimeter chamfers) that may not be visible in renders
-            * \`pass\` → Move on immediately
-          - **When to STOP iterating**: If vision flags a feature you KNOW is in your code (e.g., "chamfer not visible" but your code has \`chamfer=0.5\`), the issue is likely render resolution, not your code. Accept the warning and move on.
-          - **Always explore ALL library capabilities first**: review the preloaded library list and use available plugin tools to search documentation if needed.
-          - **Prefer library functions over manual implementations**.
-          - Prioritize geometric correctness before decorative details.
-          - Respect geometric orientation when modeling connected parts.
 
           ## RENDER PREVIEW TOOL
 
@@ -121,37 +75,6 @@ capabilities:
           It returns base64 JPEG artifacts named `<part>_<view>.jpg` and a summary listing rendered views.
 
   tools:
-    - name: vision_validate
-      description: |
-        Validate the visual integrity of a 3D part or assembly using AI vision analysis.
-        Renders 5 orthographic views and analyzes them for geometry issues.
-      parameters:
-        type: object
-        properties:
-          part:
-            type: string
-            description: The name of the SCAD part file (e.g., "base", "assembly"). REQUIRED.
-          partDescription:
-            type: string
-            description: |
-              Description of what this specific part should look like, its key features,
-              and geometry. REQUIRED when validating a single part (not assembly).
-          focus:
-            type: string
-            description: Optional free-form instructions describing what specific aspects to inspect.
-          checks:
-            type: array
-            items:
-              type: string
-            description: Optional list of specific checklist items to validate.
-        required:
-          - part
-        additionalProperties: false
-      execution:
-        config:
-          endpoint: /validate
-          timeout: 300000
-          retries: 1
     - name: render_preview
       description: |
         Render one or more standard views (300x300) of a 3MF file and return the images.
