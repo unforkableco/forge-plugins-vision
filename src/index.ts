@@ -107,6 +107,18 @@ interface ValidationRequest {
   };
 }
 
+interface RenderRequest {
+  context: {
+    sessionId: string;
+    artifact3mfUrl: string;
+    step?: number;
+  };
+  args: {
+    part: string;
+    views?: string[];
+  };
+}
+
 interface PluginArtifact {
   name: string;
   type: 'image' | 'file';
@@ -129,6 +141,10 @@ interface Fetch3mfResult {
   url: string;
   statusCode?: number;
 }
+
+type AllowedView = 'iso' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+const ALLOWED_VIEWS = new Set<AllowedView>(['iso', 'front', 'back', 'left', 'right', 'top', 'bottom']);
+const ALLOWED_VIEW_LIST = Array.from(ALLOWED_VIEWS).join(', ');
 
 /**
  * Fetch 3MF file from artifacts storage
@@ -241,16 +257,52 @@ async function renderWithBlender(
 /**
  * Convert PNG to JPEG for smaller output
  */
-async function convertToJpeg(pngPath: string): Promise<Buffer> {
+async function convertToJpeg(pngPath: string, size?: number): Promise<Buffer> {
   try {
     const sharp = require('sharp');
-    return await sharp(pngPath)
-      .jpeg({ quality: 85 })
-      .toBuffer();
+    let pipeline = sharp(pngPath);
+
+    if (size) {
+      pipeline = pipeline.resize({
+        width: size,
+        height: size,
+        fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      });
+    }
+
+    return await pipeline.jpeg({ quality: 85 }).toBuffer();
   } catch {
     // Fallback: return PNG as-is
     return fs.readFileSync(pngPath);
   }
+}
+
+function normalizeViews(requested?: string[]): { views: AllowedView[]; error?: string } {
+  if (!requested || requested.length === 0) {
+    return {
+      views: [],
+      error: `views is required and must include at least one of: ${ALLOWED_VIEW_LIST}`
+    };
+  }
+
+  const filtered = requested.filter((v): v is AllowedView => ALLOWED_VIEWS.has(v as AllowedView));
+  if (filtered.length === 0) {
+    return {
+      views: [],
+      error: `No valid views provided. Allowed views: ${ALLOWED_VIEW_LIST}`
+    };
+  }
+
+  const seen = new Set<AllowedView>();
+  const finalViews: AllowedView[] = [];
+  for (const v of filtered) {
+    if (!seen.has(v)) {
+      seen.add(v);
+      finalViews.push(v);
+    }
+  }
+  return { views: finalViews };
 }
 
 /**
@@ -410,17 +462,158 @@ function parseVisionResponse(raw: string): any {
 }
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
   res.json({
     status: 'healthy',
     service: 'vision-validate-plugin',
     timestamp: new Date().toISOString(),
-    blenderPath: BLENDER_PATH
+    blenderPath: BLENDER_PATH,
+    allowedViews: Array.from(ALLOWED_VIEWS)
   });
 });
 
+// Render preview endpoint (300x300)
+app.post('/render', async (req: express.Request, res: express.Response) => {
+  const body = req.body as RenderRequest;
+  const startTime = Date.now();
+
+  console.log('[render_preview] Received request body:', JSON.stringify(body, null, 2));
+
+  try {
+    const { part, views: requestedViews } = body.args || {};
+    const { sessionId, artifact3mfUrl, step } = body.context || {};
+
+    const { views, error: viewError } = normalizeViews(requestedViews);
+    console.log('[render_preview] Extracted args:', { part, views });
+    console.log('[render_preview] Extracted context:', { sessionId, artifact3mfUrl, step });
+
+    if (!part) {
+      const result = {
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({ error: 'part is required' }),
+        error: 'part is required'
+      };
+      return res.json(result);
+    }
+
+    if (viewError || !views || views.length === 0) {
+      const msg = viewError || `views is required and must include at least one of: ${ALLOWED_VIEW_LIST}`;
+      return res.json({
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({ error: msg, allowedViews: Array.from(ALLOWED_VIEWS) }),
+        error: msg
+      });
+    }
+
+    if (!artifact3mfUrl) {
+      return res.json({
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({ error: 'artifact3mfUrl is required' }),
+        error: 'artifact3mfUrl is required'
+      });
+    }
+
+    if (!sessionId) {
+      return res.json({
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({ error: 'context.sessionId is required' }),
+        error: 'context.sessionId is required'
+      });
+    }
+
+    console.log(`[render_preview] session=${sessionId} part=${part} step=${step}`);
+
+    const fetchResult = await fetch3mfFile(artifact3mfUrl, sessionId);
+    if (!fetchResult.success || !fetchResult.localPath) {
+      const errorDetail = fetchResult.statusCode
+        ? `Failed to fetch 3MF: ${fetchResult.error} from ${fetchResult.url}`
+        : `Failed to fetch 3MF: ${fetchResult.error || 'unknown error'} from ${fetchResult.url}`;
+      return res.json({
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({
+          error: errorDetail,
+          url: fetchResult.url,
+          statusCode: fetchResult.statusCode
+        }),
+        error: errorDetail
+      });
+    }
+
+    const outputDir = path.join(WORK_DIR, sessionId, `render_${Date.now()}`);
+    const renderResult = await renderWithBlender(fetchResult.localPath, outputDir, views);
+
+    if (!renderResult.success || renderResult.images.length === 0) {
+      return res.json({
+        ok: false,
+        tokensUsed: 0,
+        artifacts: [],
+        result: JSON.stringify({
+          error: 'Rendering failed'
+        }),
+        error: 'Rendering failed'
+      });
+    }
+
+    const artifacts: PluginArtifact[] = [];
+    const renderedViews: Array<{ view: AllowedView; file: string }> = [];
+
+    for (const img of renderResult.images) {
+      const jpegBuffer = await convertToJpeg(img.path, 300);
+      const base64 = jpegBuffer.toString('base64');
+
+      artifacts.push({
+        name: `${part}_${img.viewName}.jpg`,
+        type: 'image',
+        base64,
+        mimeType: 'image/jpeg',
+      });
+
+      renderedViews.push({ view: img.viewName as AllowedView, file: `${part}_${img.viewName}.jpg` });
+    }
+
+    const result = {
+      ok: true,
+      tokensUsed: 0,
+      artifacts,
+      result: JSON.stringify({
+        renderedViews,
+        part,
+        viewsRequested: views
+      })
+    };
+
+    console.log(`[render_preview] completed in ${Date.now() - startTime}ms, views=${renderedViews.length}`);
+    res.json(result);
+
+    try {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    } catch {
+      /* ignore cleanup errors */
+    }
+  } catch (error: any) {
+    console.error('[render_preview] error:', error.message);
+    res.json({
+      ok: false,
+      tokensUsed: 0,
+      artifacts: [],
+      result: JSON.stringify({ error: error.message }),
+      error: error.message
+    });
+  }
+});
+
 // Main validation endpoint
-app.post('/validate', async (req, res) => {
+app.post('/validate', async (req: express.Request, res: express.Response) => {
   const body = req.body as ValidationRequest;
   const startTime = Date.now();
 

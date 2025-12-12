@@ -91,6 +91,29 @@ capabilities:
           - Prioritize geometric correctness before decorative details.
           - Respect geometric orientation when modeling connected parts.
 
+          ## RENDER PREVIEW TOOL
+
+          **CRITICAL** Prefer THIS TOOL over the vision_validate tool as you'll be able to see the images by yourself.
+          
+          Use render preview to get 300x300 images from standard views:
+          
+          ```
+          call_plugin(
+            pluginSlug="forge-plugins-vision",
+            toolName="render_preview",
+            args={
+              part: "assembly_all",                // Used for naming outputs
+              views: ["iso", "front", "right"]     // REQUIRED: one or more of iso, front, back, left, right, top, bottom
+            }
+          )
+          ```
+          
+          The tool expects:
+          - A direct `artifact3mfUrl` in context (same contract as vision_validate).
+          - `views` must include at least one allowed view name (no defaults).
+          
+          It returns base64 JPEG artifacts named `<part>_<view>.jpg` and a summary listing rendered views.
+
   tools:
     - name: vision_validate
       description: |
@@ -125,6 +148,36 @@ capabilities:
           port: 8080
           endpoint: /validate
           timeout: 300000
+          retries: 1
+    - name: render_preview
+      description: |
+        Render one or more standard views (300x300) of a 3MF file and return the images.
+        Requires a direct artifact3mfUrl (same contract as vision_validate).
+      parameters:
+        type: object
+        properties:
+          part:
+            type: string
+            description: Part or assembly name (used for naming outputs). REQUIRED.
+          views:
+            type: array
+            items:
+              type: string
+              enum: [iso, front, back, left, right, top, bottom]
+            description: |
+              Required. One or more standard views to render.
+              Allowed: iso, front, back, left, right, top, bottom.
+        required:
+          - part
+          - views
+        additionalProperties: false
+      execution:
+        type: docker
+        config:
+          image: ghcr.io/unforkableco/forge-plugins-vision:latest
+          port: 8080
+          endpoint: /render
+          timeout: 180000
           retries: 1
 
 pricing:
