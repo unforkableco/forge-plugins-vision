@@ -54,11 +54,7 @@ const authenticateApiKey = (req: express.Request, res: express.Response, next: e
 
   // Check if API key is configured
   if (!API_KEY) {
-    console.error('[AUTH] API_KEY environment variable not set');
-    return res.status(500).json({
-      ok: false,
-      error: 'Server configuration error: API key not configured'
-    });
+    next(); // no authentication required
   }
 
   // Extract API key from headers
