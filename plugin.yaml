@@ -38,6 +38,12 @@ capabilities:
     sessionState: true
     storagePrefix: sessions/${sessionId}/artifacts/
 
+  executionDefaults:
+    type: docker
+    config:
+      image: ghcr.io/unforkableco/forge-plugins-vision:latest
+      port: 8080
+
   prompts:
     agents:
       - agent: cad
@@ -142,10 +148,7 @@ capabilities:
           - part
         additionalProperties: false
       execution:
-        type: docker
         config:
-          image: ghcr.io/unforkableco/forge-plugins-vision:latest
-          port: 8080
           endpoint: /validate
           timeout: 300000
           retries: 1
@@ -172,10 +175,7 @@ capabilities:
           - views
         additionalProperties: false
       execution:
-        type: docker
         config:
-          image: ghcr.io/unforkableco/forge-plugins-vision:latest
-          port: 8080
           endpoint: /render
           timeout: 180000
           retries: 1
