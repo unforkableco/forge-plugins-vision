@@ -51,11 +51,19 @@ capabilities:
         priority: 60
         content: |
 
-          ## RENDER PREVIEW TOOL
 
-          **CRITICAL** Prefer THIS TOOL over the vision_validate tool as you'll be able to see the images by yourself.
+          ## VISUAL VERIFICATION PROTOCOL
           
-          Use render preview to get 300x300 images from standard views:
+          **CRITICAL: DO NOT TRUST YOUR SCAD SCRIPTS BLINDLY.**
+          Code that looks correct often produces unexpected geometry (intersections, gaps, misalignment) that is invisible in code but obvious in renders.
+          
+          **YOU MUST:**
+          1.  Generate parts using `write_scad`.
+          2.  **IMMEDIATELY** verify them visually using `render_preview`.
+          3.  Inspect the returned images for defects (clipping, misaligned holes, incorrect scale).
+          4.  Iterate until the VISUAL result is correct.
+          
+          Use the `render_preview` tool to get 300x300 images from standard views:
           
           ```
           call_plugin(
@@ -68,11 +76,8 @@ capabilities:
           )
           ```
           
-          The tool expects:
-          - A direct `artifact3mfUrl` in context (same contract as vision_validate).
-          - `views` must include at least one allowed view name (no defaults).
-          
-          It returns base64 JPEG artifacts named `<part>_<view>.jpg` and a summary listing rendered views.
+          It returns base64 JPEG artifacts named `<part>_<view>.jpg` which you will see in the chat history.
+          **Analyze these images carefully** before proceeding or marking a task as complete.
 
   tools:
     - name: render_preview
