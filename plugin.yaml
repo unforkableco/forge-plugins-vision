@@ -65,7 +65,13 @@ capabilities:
           1.  Generate parts using `write_scad`.
           2.  **IMMEDIATELY** verify them visually using `render_preview`.
           3.  Inspect the returned images for defects, EVEN MINOR ISSUES COUNT.
-          4.  Iterate until the VISUAL result is correct.
+          4.  **COMPARE AGAINST THE DESIGN IMAGE**: After every render, compare your result to the original design image provided at the start. Ask yourself:
+              - Do ALL the features from the design image appear in my render?
+              - Are the proportions matching the design?
+              - Am I missing any small details (ears, antlers, buttons, curves)?
+          5.  Iterate until the VISUAL result **MATCHES THE DESIGN IMAGE**, not just until it "looks okay".
+          
+          **Remember**: The design image is your target. Your renders should look like the design image. If they don't match, you must iterate and adjust until they do. This may require 5-10+ iterations.
           
           Use the `render_preview` tool to get 300x300 images from standard views:
           
@@ -81,7 +87,7 @@ capabilities:
           ```
           
           It returns base64 JPEG artifacts named `<part>_<view>.jpg` which you will see in the chat history.
-          **Analyze these images carefully** before proceeding or marking a task as complete.
+          **Analyze these images carefully AND COMPARE TO THE DESIGN IMAGE** before proceeding or marking a task as complete.
 
   tools:
     - name: render_preview
