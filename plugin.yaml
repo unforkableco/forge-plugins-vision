@@ -56,11 +56,15 @@ capabilities:
           
           **CRITICAL: DO NOT TRUST YOUR SCAD SCRIPTS BLINDLY.**
           Code that looks correct often produces unexpected geometry (intersections, gaps, misalignment) that is invisible in code but obvious in renders.
+
+          ## CRITICAL: render_preview gives you IMAGES, not verdicts.
+          The fact that render_preview returns "ok: true" means the RENDERING SUCCEEDED - 
+          it says NOTHING about geometry correctness!
           
           **YOU MUST:**
           1.  Generate parts using `write_scad`.
           2.  **IMMEDIATELY** verify them visually using `render_preview`.
-          3.  Inspect the returned images for defects (clipping, misaligned holes, incorrect scale).
+          3.  Inspect the returned images for defects, EVEN MINOR ISSUES COUNT.
           4.  Iterate until the VISUAL result is correct.
           
           Use the `render_preview` tool to get 300x300 images from standard views:
