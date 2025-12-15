@@ -139,7 +139,7 @@ def clear_scene():
 
 
 def import_3mf(filepath):
-    """Import a 3MF file into Blender."""
+    """Import a 3MF file into Blender, with fallback for materials."""
     # Check if file exists
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"3MF file not found: {filepath}")
@@ -148,13 +148,29 @@ def import_3mf(filepath):
     # If 3MF import fails, we can try to extract and import the mesh
     try:
         # Blender 2.83+ has native 3MF support
+        # NOTE: Native importer might miss materials or not handle alpha correctly
+        # We will try native first, then check if we need to fix materials
         bpy.ops.import_mesh.threemf(filepath=filepath)
-    except AttributeError:
+        
+        # Check if we got any materials. If not, or if they are "invisible", we might need to fix them
+        has_materials = False
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'MESH' and len(obj.data.materials) > 0:
+                has_materials = True
+                break
+        
+        if not has_materials:
+            print("Native import resulted in no materials. Trying manual import...")
+            raise AttributeError("Force manual import") # Trigger fallback
+            
+    except (AttributeError, RuntimeError):
         # Fallback: 3MF is a ZIP file containing model.xml with mesh data
         # For older Blender versions, we need a different approach
         import zipfile
         import tempfile
         import xml.etree.ElementTree as ET
+        
+        print("Using manual 3MF importer...")
         
         with zipfile.ZipFile(filepath, 'r') as zf:
             # Find the model file (usually 3D/3dmodel.model)
@@ -175,8 +191,75 @@ def import_3mf(filepath):
                 # Extract namespace
                 ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
                 
-                # Find mesh data
+                # 1. Parse Materials (BaseMaterials)
+                # Map id -> blender_material
+                materials_map = {}
+                
+                # Find all resources/basematerials
+                resources = root.find('m:resources', ns)
+                if resources is not None:
+                    for basemat_group in resources.findall('.//m:basematerials', ns):
+                        group_id = basemat_group.get('id')
+                        for base in basemat_group.findall('m:base', ns):
+                            base_name = base.get('name', 'Material')
+                            display_color = base.get('displaycolor', '#FFFFFF')
+                            
+                            # Parse Hex Color #RRGGBBAA or #RRGGBB
+                            if display_color.startswith('#'):
+                                hex_col = display_color[1:]
+                                if len(hex_col) == 6:
+                                    r = int(hex_col[0:2], 16) / 255.0
+                                    g = int(hex_col[2:4], 16) / 255.0
+                                    b = int(hex_col[4:6], 16) / 255.0
+                                    a = 1.0
+                                elif len(hex_col) == 8:
+                                    r = int(hex_col[0:2], 16) / 255.0
+                                    g = int(hex_col[2:4], 16) / 255.0
+                                    b = int(hex_col[4:6], 16) / 255.0
+                                    a = int(hex_col[6:8], 16) / 255.0
+                                else:
+                                    r, g, b, a = 0.8, 0.8, 0.8, 1.0
+                            else:
+                                r, g, b, a = 0.8, 0.8, 0.8, 1.0
+                            
+                            # CRITICAL FIX: If alpha is 0 but color is present, assume it should be opaque
+                            # Many 3MF exporters write #RRGGBB00 by mistake or for specific purposes
+                            if a < 0.01:
+                                print(f"Fixing invisible material '{base_name}' (alpha=0 -> 1.0)")
+                                a = 1.0
+                                
+                            # Create Blender Material
+                            mat = bpy.data.materials.new(name=base_name)
+                            mat.use_nodes = True
+                            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+                            if bsdf:
+                                bsdf.inputs['Base Color'].default_value = (r, g, b, a)
+                                bsdf.inputs['Roughness'].default_value = 0.5
+                                bsdf.inputs['Metallic'].default_value = 0.1
+                            
+                            # Store in map: (group_id, base_index) -> material
+                            # 3MF refers to materials by (pid, p1) where pid=group_id, p1=index_in_group
+                            # We can't easily get index without counter, so let's re-iterate or use list
+                            pass 
+
+                    # Re-iterate to build map with correct indices
+                    for basemat_group in resources.findall('.//m:basematerials', ns):
+                        group_id = basemat_group.get('id')
+                        for idx, base in enumerate(basemat_group.findall('m:base', ns)):
+                            base_name = base.get('name', f'Material_{group_id}_{idx}')
+                            # Find the material we just created (by name) or create new if name collision
+                            mat = bpy.data.materials.get(base_name)
+                            if not mat:
+                                # Fallback re-creation if needed (unlikely)
+                                mat = bpy.data.materials.new(name=base_name)
+                            
+                            materials_map[(group_id, str(idx))] = mat
+
+                # 2. Parse Objects and Meshes
                 for obj in root.findall('.//m:object', ns):
+                    obj_pid = obj.get('pid') # Default property ID for the object
+                    obj_p1 = obj.get('p1')   # Default property index
+                    
                     mesh_elem = obj.find('.//m:mesh', ns)
                     if mesh_elem is None:
                         continue
@@ -195,21 +278,55 @@ def import_3mf(filepath):
                         z = float(v.get('z', 0))
                         vertices.append((x, y, z))
                     
-                    # Parse triangles
+                    # Parse triangles and materials
                     faces = []
+                    face_materials = [] # List of material indices per face
+                    
+                    # Track unique materials used in this mesh to assign to object slots
+                    used_materials = [] 
+                    
                     for t in triangles_elem.findall('m:triangle', ns):
                         v1 = int(t.get('v1', 0))
                         v2 = int(t.get('v2', 0))
                         v3 = int(t.get('v3', 0))
                         faces.append((v1, v2, v3))
+                        
+                        # Determine material for this face
+                        # Priority: Triangle attributes > Object attributes
+                        pid = t.get('pid', obj_pid)
+                        p1 = t.get('p1', obj_p1)
+                        
+                        mat = None
+                        if pid and p1:
+                            mat = materials_map.get((pid, p1))
+                        
+                        if mat:
+                            if mat not in used_materials:
+                                used_materials.append(mat)
+                            face_materials.append(used_materials.index(mat))
+                        else:
+                            face_materials.append(0) # Default/None
                     
                     # Create mesh in Blender
                     mesh = bpy.data.meshes.new("imported_mesh")
                     mesh.from_pydata(vertices, [], faces)
+                    
+                    # Assign materials to mesh
+                    for mat in used_materials:
+                        mesh.materials.append(mat)
+                    
+                    # Assign material indices to faces
+                    if face_materials and used_materials:
+                        mesh.update() # Ensure polygons are ready
+                        # Validate count
+                        if len(mesh.polygons) == len(face_materials):
+                            for i, poly in enumerate(mesh.polygons):
+                                poly.material_index = face_materials[i]
+                    
                     mesh.update()
                     
-                    obj = bpy.data.objects.new("imported_object", mesh)
-                    bpy.context.collection.objects.link(obj)
+                    obj_blender = bpy.data.objects.new("imported_object", mesh)
+                    bpy.context.collection.objects.link(obj_blender)
     
     return True
 
@@ -341,7 +458,7 @@ def setup_lighting(bounds_center, max_dim):
 
 
 def setup_materials():
-    """Apply a proper 3D material to all mesh objects for better visualization."""
+    """Apply a proper 3D material to all mesh objects if they don't have one."""
     # Create a default material if none exists
     mat_name = "DefaultMaterial"
     if mat_name not in bpy.data.materials:
@@ -356,11 +473,13 @@ def setup_materials():
     else:
         mat = bpy.data.materials[mat_name]
     
-    # Apply to all mesh objects that don't have materials
+    # Apply to all mesh objects
     for obj in bpy.context.scene.objects:
         if obj.type == 'MESH':
+            # Only apply default material if the object has NO materials
             if len(obj.data.materials) == 0:
                 obj.data.materials.append(mat)
+            
             # Ensure smooth shading for better 3D appearance
             for poly in obj.data.polygons:
                 poly.use_smooth = True

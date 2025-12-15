@@ -174,6 +174,41 @@ Validate a 3D part's geometry.
 }
 ```
 
+### `POST /render`
+
+Render one or more standard views (300x300) of a 3MF and return images.
+
+**Request Body (views are REQUIRED):**
+```json
+{
+  "context": {
+    "sessionId": "abc123",
+    "artifact3mfUrl": "https://.../out/assembly_all.3mf"
+  },
+  "args": {
+    "part": "assembly_all",
+    "views": ["iso", "front"]  // at least one of: iso, front, back, left, right, top, bottom
+  }
+}
+```
+
+**Response (example):**
+```json
+{
+  "ok": true,
+  "tokensUsed": 0,
+  "artifacts": [
+    {
+      "name": "assembly_all_iso.jpg",
+      "type": "image",
+      "mimeType": "image/jpeg",
+      "base64": "..."
+    }
+  ],
+  "result": "{\"renderedViews\":[{\"view\":\"iso\",\"file\":\"assembly_all_iso.jpg\"}],\"part\":\"assembly_all\",\"viewsRequested\":[\"iso\",\"front\"]}"
+}
+```
+
 ## Plugin Configuration (plugin.yaml)
 
 ```yaml

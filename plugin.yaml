@@ -7,10 +7,9 @@ plugin:
   author: Fabrikator Team
   description: |
     AI-powered visual validation of 3D CAD geometry.
-    Renders 3MF files from multiple viewpoints using Blender and analyzes
-    the geometry using GPT-4 Vision or Gemini to detect issues.
+    Renders 3MF files from multiple viewpoints using Blender
   tags:
-    - validation
+    # - validation
     - vision
     - ai
     - cad
@@ -23,14 +22,14 @@ requirements:
       description: API key for authenticating requests to the vision service
       required: true
       fallback: none
-    - name: OPENAI_API_KEY
-      description: OpenAI API key for GPT-4 Vision analysis
-      required: false
-      fallback: platform
-    - name: GEMINI_API_KEY
-      description: Google Gemini API key (alternative to OpenAI)
-      required: false
-      fallback: platform
+    # - name: OPENAI_API_KEY
+    #   description: OpenAI API key for GPT-4 Vision analysis
+    #   required: false
+    #   fallback: platform
+    # - name: GEMINI_API_KEY
+    #   description: Google Gemini API key (alternative to OpenAI)
+    #   required: false
+    #   fallback: platform
 
 capabilities:
   dataAccess:
