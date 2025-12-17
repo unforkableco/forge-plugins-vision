@@ -80,7 +80,7 @@ capabilities:
           
           **Remember**: The design image is your target. Your renders should look like the design image. If they don't match, you must iterate and adjust until they do. This may require 5-10+ iterations.
           
-          Use the `render_preview` tool to get 300x300 images from standard views:
+          Use the `render_preview` tool to get rendered images from standard views:
           
           ```
           call_plugin(
@@ -93,13 +93,13 @@ capabilities:
           )
           ```
           
-          It returns base64 JPEG artifacts named `<part>_<view>.jpg` which you will see in the chat history.
+          It returns base64 PNG artifacts named `<part>_<view>.png` which you will see in the chat history.
           **Analyze these images carefully AND COMPARE TO THE DESIGN IMAGE** before proceeding or marking a task as complete.
 
   tools:
     - name: render_preview
       description: |
-        Render one or more standard views (300x300) of a 3MF file and return the images.
+        Render one or more standard views (at configured resolution) of a 3MF file and return the images.
         Requires a direct artifact3mfUrl (same contract as vision_validate).
       parameters:
         type: object

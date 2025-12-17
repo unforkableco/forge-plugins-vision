@@ -374,7 +374,7 @@ async function callOpenAIVision(
     content.push({
       type: 'image_url',
       image_url: {
-        url: `data:image/jpeg;base64,${img.base64}`,
+        url: `data:image/png;base64,${img.base64}`,
         detail: 'high'
       }
     });
@@ -406,7 +406,7 @@ async function callGeminiVision(
   for (const img of images) {
     parts.push({
       inline_data: {
-        mime_type: 'image/jpeg',
+        mime_type: 'image/png',
         data: img.base64
       }
     });
@@ -569,17 +569,17 @@ app.post('/render', async (req: express.Request, res: express.Response) => {
     const renderedViews: Array<{ view: AllowedView; file: string }> = [];
 
     for (const img of renderResult.images) {
-      const jpegBuffer = await convertToJpeg(img.path, 300);
-      const base64 = jpegBuffer.toString('base64');
+      const buffer = fs.readFileSync(img.path);
+      const base64 = buffer.toString('base64');
 
       artifacts.push({
-        name: `${part}_${img.viewName}.jpg`,
+        name: `${part}_${img.viewName}.png`,
         type: 'image',
         base64,
-        mimeType: 'image/jpeg',
+        mimeType: 'image/png',
       });
 
-      renderedViews.push({ view: img.viewName as AllowedView, file: `${part}_${img.viewName}.jpg` });
+      renderedViews.push({ view: img.viewName as AllowedView, file: `${part}_${img.viewName}.png` });
     }
 
     const result = {
@@ -693,15 +693,15 @@ app.post('/validate', async (req: express.Request, res: express.Response) => {
     const artifacts: PluginArtifact[] = [];
 
     for (const img of renderResult.images) {
-      const jpegBuffer = await convertToJpeg(img.path);
-      const base64 = jpegBuffer.toString('base64');
+      const buffer = fs.readFileSync(img.path);
+      const base64 = buffer.toString('base64');
 
       imageData.push({ base64, viewName: img.viewName });
       artifacts.push({
-        name: `${part}_${img.viewName}.jpg`,  // Name includes view for identification
+        name: `${part}_${img.viewName}.png`,  // Name includes view for identification
         type: 'image',
         base64,
-        mimeType: 'image/jpeg',
+        mimeType: 'image/png',
       });
     }
 
