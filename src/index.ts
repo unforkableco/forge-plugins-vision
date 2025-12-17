@@ -176,10 +176,10 @@ async function fetch3mfFile(
 
     const buffer = await response.buffer();
     const localPath = path.join(WORK_DIR, sessionId, fileName);
-    
+
     fs.mkdirSync(path.dirname(localPath), { recursive: true });
     fs.writeFileSync(localPath, buffer);
-    
+
     return { success: true, localPath, url: artifact3mfUrl };
   } catch (error: any) {
     console.error(`Error fetching 3MF: ${error.message}`);
@@ -200,7 +200,7 @@ async function renderWithBlender(
   views: string[] = ['iso', 'front', 'right', 'top', 'bottom']
 ): Promise<{ success: boolean; images: Array<{ name: string; path: string; viewName: string }> }> {
   const scriptPath = path.join(__dirname, 'render3mf.py');
-  
+
   if (!fs.existsSync(model3mfPath)) {
     console.error(`3MF file not found: ${model3mfPath}`);
     return { success: false, images: [] };
@@ -221,7 +221,12 @@ async function renderWithBlender(
     console.log(`Starting Blender render: ${model3mfPath}`);
 
     const proc = spawn(BLENDER_PATH, args, {
-      env: { ...process.env, LIBGL_ALWAYS_SOFTWARE: '1' }
+      env: {
+        ...process.env,
+        LIBGL_ALWAYS_SOFTWARE: '1',
+        RENDER_RESOLUTION: process.env.RENDER_RESOLUTION || '500',
+        RENDER_SAMPLES: process.env.RENDER_SAMPLES || '128'
+      }
     });
 
     let stdout = '';
@@ -649,14 +654,14 @@ app.post('/validate', async (req: express.Request, res: express.Response) => {
 
     const fetchResult = await fetch3mfFile(artifact3mfUrl, sessionId);
     if (!fetchResult.success) {
-      const errorDetail = fetchResult.statusCode 
+      const errorDetail = fetchResult.statusCode
         ? `Failed to fetch 3MF: ${fetchResult.error} from ${fetchResult.url}`
         : `Failed to fetch 3MF: ${fetchResult.error} from ${fetchResult.url}`;
       return res.json({
         ok: false,
         tokensUsed: 0,
         artifacts: [],
-        result: JSON.stringify({ 
+        result: JSON.stringify({
           verdict: 'error',
           error: errorDetail,
           url: fetchResult.url,
@@ -690,7 +695,7 @@ app.post('/validate', async (req: express.Request, res: express.Response) => {
     for (const img of renderResult.images) {
       const jpegBuffer = await convertToJpeg(img.path);
       const base64 = jpegBuffer.toString('base64');
-      
+
       imageData.push({ base64, viewName: img.viewName });
       artifacts.push({
         name: `${part}_${img.viewName}.jpg`,  // Name includes view for identification
@@ -702,7 +707,7 @@ app.post('/validate', async (req: express.Request, res: express.Response) => {
 
     // Step 4: Run vision analysis
     const prompt = buildVisionPrompt(part, partDescription, focus, checks);
-    
+
     const openaiKey = body.apiKeys?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     const geminiKey = body.apiKeys?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
@@ -753,7 +758,7 @@ app.post('/validate', async (req: express.Request, res: express.Response) => {
     // Cleanup
     try {
       fs.rmSync(outputDir, { recursive: true, force: true });
-    } catch {}
+    } catch { }
 
   } catch (error: any) {
     console.error('[vision_validate] error:', error.message);

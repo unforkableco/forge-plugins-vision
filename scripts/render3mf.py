@@ -545,10 +545,20 @@ def setup_render_settings(width=800, height=800, max_dim=1.0, device_type='CPU')
     # Configure device based on detection
     if device_type == 'CPU':
         scene.cycles.device = 'CPU'
-        scene.cycles.samples = 8     # CPU: reduced samples for faster renders
+        # Allow overriding samples via env var, default to 8 for CPU if not set
+        custom_samples = os.environ.get('RENDER_SAMPLES')
+        if custom_samples:
+             scene.cycles.samples = int(custom_samples)
+        else:
+             scene.cycles.samples = 8     # CPU: reduced samples for faster renders
     else:
         scene.cycles.device = 'GPU'
-        scene.cycles.samples = 128   # GPU: keep higher quality when available
+        # Allow overriding samples via env var, default to 128 for GPU if not set
+        custom_samples = os.environ.get('RENDER_SAMPLES')
+        if custom_samples:
+             scene.cycles.samples = int(custom_samples)
+        else:
+             scene.cycles.samples = 128   # GPU: keep higher quality when available
 
     scene.cycles.use_denoising = False  # Keep edges sharp
     
@@ -748,7 +758,10 @@ def main():
     # Setup lighting and render settings
     max_dim = max(bounds_size.x, bounds_size.y, bounds_size.z, 1.0)
     setup_lighting(bounds_center, max_dim)
-    setup_render_settings(width=500, height=500, max_dim=max_dim, device_type=device_type)
+    
+    # Get resolution from env or default to 500
+    resolution = int(os.environ.get('RENDER_RESOLUTION', '500'))
+    setup_render_settings(width=resolution, height=resolution, max_dim=max_dim, device_type=device_type)
     
     # Render each view
     results = {}
