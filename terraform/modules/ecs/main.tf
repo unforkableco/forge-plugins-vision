@@ -136,18 +136,7 @@ resource "aws_ecs_task_definition" "main" {
             value = var.backend_api_key
           }
         ] : [],
-        var.openai_api_key != "" ? [
-          {
-            name  = "OPENAI_API_KEY"
-            value = var.openai_api_key
-          }
-        ] : [],
-        var.gemini_api_key != "" ? [
-          {
-            name  = "GEMINI_API_KEY"
-            value = var.gemini_api_key
-          }
-        ] : []
+
       )
 
       # GPU resource requirements

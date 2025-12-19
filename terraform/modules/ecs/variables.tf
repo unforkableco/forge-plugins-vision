@@ -64,17 +64,7 @@ variable "api_key" {
   sensitive   = true
 }
 
-variable "openai_api_key" {
-  description = "OpenAI API key"
-  type        = string
-  sensitive   = true
-}
 
-variable "gemini_api_key" {
-  description = "Gemini API key"
-  type        = string
-  sensitive   = true
-}
 
 variable "backend_api_key" {
   description = "API key for authenticating requests to the backend (optional)"

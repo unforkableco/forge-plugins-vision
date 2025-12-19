@@ -16,20 +16,7 @@ plugin:
     - quality
   iconUrl: https://fabrikator.ai/icons/vision-validate.png
 
-requirements:
   apiKeys:
-    - name: API_KEY
-      description: API key for authenticating requests to the vision service
-      required: true
-      fallback: none
-    - name: OPENAI_API_KEY
-      description: OpenAI API key for GPT-4 Vision analysis
-      required: false
-      fallback: platform
-    - name: GEMINI_API_KEY
-      description: Google Gemini API key (alternative to OpenAI)
-      required: false
-      fallback: platform
     - name: RENDER_RESOLUTION
       description: Resolution for renders (e.g. 500)
       required: false
