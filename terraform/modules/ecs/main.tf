@@ -120,6 +120,14 @@ resource "aws_ecs_task_definition" "main" {
           {
             name  = "API_KEY"
             value = var.api_key
+          },
+          {
+            name  = "RENDER_RESOLUTION"
+            value = var.render_resolution
+          },
+          {
+            name  = "RENDER_SAMPLES"
+            value = var.render_samples
           }
         ],
         var.backend_api_key != "" ? [

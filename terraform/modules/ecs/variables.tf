@@ -132,3 +132,15 @@ variable "memory_threshold" {
   description = "Memory utilization threshold for auto-scaling"
   type        = number
 }
+
+variable "render_resolution" {
+  description = "Resolution for renders (e.g. 500)"
+  type        = string
+  default     = "300"
+}
+
+variable "render_samples" {
+  description = "Number of render samples (e.g. 128)"
+  type        = string
+  default     = "8"
+}
