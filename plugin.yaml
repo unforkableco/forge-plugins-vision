@@ -82,6 +82,7 @@ capabilities:
           
           It returns base64 PNG artifacts named `<part>_<view>.png` which you will see in the chat history.
           **Analyze these images carefully AND COMPARE TO THE DESIGN IMAGE** before proceeding or marking a task as complete.
+          ITS BETTER TO VALIDATE PARTS INDIVIDUALLY THAN ASSEMBLIES, AS ASSEMBLIES CAN HIDE ISSUES IN PARTS.
 
   tools:
     - name: render_preview
