@@ -46,6 +46,21 @@ if (!fs.existsSync(WORK_DIR)) {
 
 // No authentication middleware (API_KEY removed)
 
+// Session render tracking: Map<sessionId, Set<renderedFileName>>
+const sessionRenders: Map<string, Set<string>> = new Map();
+
+function recordRender(sessionId: string, fileName: string): void {
+  if (!sessionRenders.has(sessionId)) {
+    sessionRenders.set(sessionId, new Set());
+  }
+  sessionRenders.get(sessionId)!.add(fileName);
+  console.log(`[gating] Recorded render: session=${sessionId} file=${fileName}`);
+}
+
+function hasRendered(sessionId: string, fileName: string): boolean {
+  return sessionRenders.get(sessionId)?.has(fileName) || false;
+}
+
 
 
 interface RenderRequest {
@@ -382,6 +397,10 @@ app.post('/render', async (req: express.Request, res: express.Response) => {
       })
     };
 
+    // Record render for gating
+    const fileName = path.basename(new URL(artifact3mfUrl).pathname);
+    recordRender(sessionId, fileName);
+
     console.log(`[render_preview] completed in ${Date.now() - startTime}ms, views=${renderedViews.length}`);
     res.json(result);
 
@@ -402,12 +421,48 @@ app.post('/render', async (req: express.Request, res: express.Response) => {
   }
 });
 
+// Gating validation endpoint
+interface ValidateRequest {
+  sessionId: string;
+  artifacts: Array<{ name: string; url: string }>;
+}
 
+app.post('/validate', (req: express.Request, res: express.Response) => {
+  const body = req.body as ValidateRequest;
+  const { sessionId, artifacts } = body;
+
+  console.log(`[validate] sessionId=${sessionId} artifacts=${artifacts?.length || 0}`);
+
+  if (!sessionId || !artifacts || !Array.isArray(artifacts)) {
+    return res.json({ validated: false, message: 'Invalid request: sessionId and artifacts required' });
+  }
+
+  const unrendered: string[] = [];
+
+  for (const artifact of artifacts) {
+    // Only check 3MF files
+    if (artifact.name.endsWith('.3mf')) {
+      if (!hasRendered(sessionId, artifact.name)) {
+        unrendered.push(artifact.name);
+      }
+    }
+  }
+
+  if (unrendered.length > 0) {
+    const message = `The following 3MF files have not been rendered: ${unrendered.join(', ')}`;
+    console.log(`[validate] FAILED: ${message}`);
+    return res.json({ validated: false, message });
+  }
+
+  console.log(`[validate] PASSED for session=${sessionId}`);
+  res.json({ validated: true });
+});
 
 app.listen(PORT, () => {
   console.log(`Vision Validate Plugin running on port ${PORT}`);
   console.log(`Work directory: ${WORK_DIR}`);
   console.log(`Blender path: ${BLENDER_PATH}`);
+  console.log(`Gating: ENABLED`);
 
 
 });
