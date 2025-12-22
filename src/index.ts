@@ -46,19 +46,19 @@ if (!fs.existsSync(WORK_DIR)) {
 
 // No authentication middleware (API_KEY removed)
 
-// Session render tracking: Map<sessionId, Set<renderedFileName>>
-const sessionRenders: Map<string, Set<string>> = new Map();
+// Session render tracking: Map<sessionId, Map<partName, lastRenderStep>>
+const sessionRenders: Map<string, Map<string, number>> = new Map();
 
-function recordRender(sessionId: string, fileName: string): void {
+function recordRender(sessionId: string, partName: string, step: number): void {
   if (!sessionRenders.has(sessionId)) {
-    sessionRenders.set(sessionId, new Set());
+    sessionRenders.set(sessionId, new Map());
   }
-  sessionRenders.get(sessionId)!.add(fileName);
-  console.log(`[gating] Recorded render: session=${sessionId} file=${fileName}`);
+  sessionRenders.get(sessionId)!.set(partName, step);
+  console.log(`[gating] Recorded render: session=${sessionId} part=${partName} step=${step}`);
 }
 
-function hasRendered(sessionId: string, fileName: string): boolean {
-  return sessionRenders.get(sessionId)?.has(fileName) || false;
+function getLastRenderStep(sessionId: string, partName: string): number {
+  return sessionRenders.get(sessionId)?.get(partName) ?? -1;
 }
 
 
@@ -397,9 +397,9 @@ app.post('/render', async (req: express.Request, res: express.Response) => {
       })
     };
 
-    // Record render for gating
-    const fileName = path.basename(new URL(artifact3mfUrl).pathname);
-    recordRender(sessionId, fileName);
+    // Record render for gating (use part name and step)
+    const currentStep = step ?? Date.now(); // fallback to timestamp if step not provided
+    recordRender(sessionId, part, currentStep);
 
     console.log(`[render_preview] completed in ${Date.now() - startTime}ms, views=${renderedViews.length}`);
     res.json(result);
@@ -424,7 +424,7 @@ app.post('/render', async (req: express.Request, res: express.Response) => {
 // Gating validation endpoint
 interface ValidateRequest {
   sessionId: string;
-  artifacts: Array<{ name: string; url: string }>;
+  artifacts: Array<{ name: string; url: string; partName?: string; step?: number }>;
 }
 
 app.post('/validate', (req: express.Request, res: express.Response) => {
@@ -437,19 +437,28 @@ app.post('/validate', (req: express.Request, res: express.Response) => {
     return res.json({ validated: false, message: 'Invalid request: sessionId and artifacts required' });
   }
 
-  const unrendered: string[] = [];
+  const missingRenders: string[] = [];
 
   for (const artifact of artifacts) {
     // Only check 3MF files
     if (artifact.name.endsWith('.3mf')) {
-      if (!hasRendered(sessionId, artifact.name)) {
-        unrendered.push(artifact.name);
+      // Extract part name: remove timestamp suffix and .3mf extension
+      // e.g., "part_cube_1766323549127.3mf" -> "part_cube"
+      const partName = artifact.partName || artifact.name.replace(/_\d+\.3mf$/, '').replace(/\.3mf$/, '');
+      const artifactStep = artifact.step ?? 0;
+      const lastRenderStep = getLastRenderStep(sessionId, partName);
+
+      console.log(`[validate] Checking: part=${partName} artifactStep=${artifactStep} lastRender=${lastRenderStep}`);
+
+      // Valid if render happened at or after artifact creation
+      if (lastRenderStep < artifactStep) {
+        missingRenders.push(`${artifact.name} (created step ${artifactStep}, last rendered step ${lastRenderStep})`);
       }
     }
   }
 
-  if (unrendered.length > 0) {
-    const message = `The following 3MF files have not been rendered: ${unrendered.join(', ')}`;
+  if (missingRenders.length > 0) {
+    const message = `The following parts need to be rendered: ${missingRenders.join(', ')}`;
     console.log(`[validate] FAILED: ${message}`);
     return res.json({ validated: false, message });
   }
