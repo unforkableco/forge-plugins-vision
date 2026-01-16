@@ -458,7 +458,16 @@ app.post('/validate', (req: express.Request, res: express.Response) => {
   }
 
   if (missingRenders.length > 0) {
-    const message = `The following parts need to be rendered: ${missingRenders.join(', ')}`;
+    const partsList = missingRenders.join(', ');
+    const message = `The following parts need to be rendered: ${partsList}
+
+⚠️ IMPORTANT: You MUST render these parts ONE BY ONE (not all at once). For each part:
+1. Call render_preview for that single part
+2. Carefully analyze the rendered image to verify the geometry is correct
+3. If there are any issues with the design, fix the SCAD code and re-render before proceeding
+4. Only move to the next part after confirming the current one looks correct
+
+Do NOT batch all renders in a single step. Each render must be followed by visual analysis and potential iteration.`;
     console.log(`[validate] FAILED: ${message}`);
     return res.json({ validated: false, message });
   }
