@@ -382,6 +382,22 @@ def setup_camera_for_view(view_name, bounds_center, bounds_size, max_dim=None):
         'bottom': {
             'location_offset': Vector((0, 0, -1)),
             'track_to_target': True
+        },
+        # Section views - cut through model center
+        'section_x': {
+            'location_offset': Vector((1, 0, 0)),
+            'track_to_target': True,
+            'section_axis': 'X'
+        },
+        'section_y': {
+            'location_offset': Vector((0, 1, 0)),
+            'track_to_target': True,
+            'section_axis': 'Y'
+        },
+        'section_z': {
+            'location_offset': Vector((0, 0, 1)),
+            'track_to_target': True,
+            'section_axis': 'Z'
         }
     }
     
@@ -485,6 +501,164 @@ def setup_materials():
                 poly.use_smooth = True
             obj.data.use_auto_smooth = True
             obj.data.auto_smooth_angle = math.radians(40)
+
+
+def apply_section_plane(axis, cut_position):
+    """
+    Apply a section plane shader to all materials in the scene.
+
+    Uses shader nodes to clip geometry on one side of the cut plane,
+    making interior geometry visible.
+
+    Args:
+        axis: 'X', 'Y', or 'Z' - the axis perpendicular to the cut plane
+        cut_position: World-space position of the cut plane on the given axis
+    """
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH':
+            continue
+
+        # Process each material slot
+        for slot_idx, slot in enumerate(obj.material_slots):
+            mat = slot.material
+            if not mat or not mat.use_nodes:
+                continue
+
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+
+            # Find the material output node
+            output_node = None
+            for node in nodes:
+                if node.type == 'OUTPUT_MATERIAL':
+                    output_node = node
+                    break
+
+            if not output_node:
+                continue
+
+            # Find what's connected to the surface input
+            surface_input = output_node.inputs.get('Surface')
+            if not surface_input or not surface_input.links:
+                continue
+
+            original_shader = surface_input.links[0].from_node
+            original_socket = surface_input.links[0].from_socket
+
+            # Check if section plane is already applied (avoid duplicates)
+            if any(n.name == 'SectionPlane_Geometry' for n in nodes):
+                continue
+
+            # Create section plane nodes
+            # Geometry node to get world position
+            geom_node = nodes.new('ShaderNodeNewGeometry')
+            geom_node.name = 'SectionPlane_Geometry'
+            geom_node.location = (original_shader.location[0] - 400, original_shader.location[1] - 200)
+
+            # Separate XYZ to get the axis component
+            separate_node = nodes.new('ShaderNodeSeparateXYZ')
+            separate_node.name = 'SectionPlane_Separate'
+            separate_node.location = (geom_node.location[0] + 150, geom_node.location[1])
+            links.new(geom_node.outputs['Position'], separate_node.inputs['Vector'])
+
+            # Compare against cut position (less than = keep, greater than = clip)
+            compare_node = nodes.new('ShaderNodeMath')
+            compare_node.name = 'SectionPlane_Compare'
+            compare_node.operation = 'LESS_THAN'
+            compare_node.inputs[1].default_value = cut_position
+            compare_node.location = (separate_node.location[0] + 150, separate_node.location[1])
+
+            # Connect the appropriate axis
+            axis_output = separate_node.outputs[axis]
+            links.new(axis_output, compare_node.inputs[0])
+
+            # Create transparent shader for clipped areas
+            transparent_node = nodes.new('ShaderNodeBsdfTransparent')
+            transparent_node.name = 'SectionPlane_Transparent'
+            transparent_node.location = (compare_node.location[0], compare_node.location[1] - 150)
+
+            # Create cut face shader (amber/orange color for interior)
+            cut_face_node = nodes.new('ShaderNodeBsdfPrincipled')
+            cut_face_node.name = 'SectionPlane_CutFace'
+            cut_face_node.location = (compare_node.location[0], compare_node.location[1] - 300)
+            cut_face_node.inputs['Base Color'].default_value = (1.0, 0.7, 0.3, 1.0)  # Amber
+            cut_face_node.inputs['Roughness'].default_value = 0.8
+
+            # Geometry node for backfacing check (cut faces are backfacing)
+            backface_node = nodes.new('ShaderNodeNewGeometry')
+            backface_node.name = 'SectionPlane_Backface'
+            backface_node.location = (cut_face_node.location[0] - 200, cut_face_node.location[1])
+
+            # Mix between original and cut face based on backfacing
+            face_mix_node = nodes.new('ShaderNodeMixShader')
+            face_mix_node.name = 'SectionPlane_FaceMix'
+            face_mix_node.location = (compare_node.location[0] + 150, compare_node.location[1] - 150)
+            links.new(backface_node.outputs['Backfacing'], face_mix_node.inputs['Fac'])
+            links.new(original_socket, face_mix_node.inputs[1])
+            links.new(cut_face_node.outputs['BSDF'], face_mix_node.inputs[2])
+
+            # Mix shader to combine visible vs clipped
+            mix_node = nodes.new('ShaderNodeMixShader')
+            mix_node.name = 'SectionPlane_Mix'
+            mix_node.location = (face_mix_node.location[0] + 150, face_mix_node.location[1])
+            links.new(compare_node.outputs['Value'], mix_node.inputs['Fac'])
+            links.new(transparent_node.outputs['BSDF'], mix_node.inputs[1])
+            links.new(face_mix_node.outputs['Shader'], mix_node.inputs[2])
+
+            # Connect mix to output
+            links.new(mix_node.outputs['Shader'], surface_input)
+
+            # Enable backface culling workaround - set material to use alpha blend
+            mat.blend_method = 'BLEND'
+
+
+def remove_section_plane():
+    """
+    Remove section plane shader nodes from all materials.
+    Restores materials to their original state.
+    """
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH':
+            continue
+
+        for slot in obj.material_slots:
+            mat = slot.material
+            if not mat or not mat.use_nodes:
+                continue
+
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+
+            # Find section plane nodes
+            section_nodes = [n for n in nodes if n.name.startswith('SectionPlane_')]
+            if not section_nodes:
+                continue
+
+            # Find the mix node and trace back to original shader
+            mix_node = nodes.get('SectionPlane_Mix')
+            face_mix_node = nodes.get('SectionPlane_FaceMix')
+
+            if mix_node and face_mix_node:
+                # Find original shader connection (input 1 of face_mix)
+                original_connection = face_mix_node.inputs[1].links
+                if original_connection:
+                    original_socket = original_connection[0].from_socket
+
+                    # Find material output
+                    for node in nodes:
+                        if node.type == 'OUTPUT_MATERIAL':
+                            surface_input = node.inputs.get('Surface')
+                            if surface_input:
+                                # Reconnect original shader
+                                links.new(original_socket, surface_input)
+                            break
+
+            # Remove all section plane nodes
+            for node in section_nodes:
+                nodes.remove(node)
+
+            # Reset blend method
+            mat.blend_method = 'OPAQUE'
 
 
 def get_scene_bounds():
@@ -688,14 +862,34 @@ def setup_ambient_occlusion_compositor(ao_strength: float = 0.35, cavity_strengt
 
 def render_view(view_name, output_path, bounds_center, bounds_size, max_dim=None):
     """Render a single view and save to file."""
+    # Check if this is a section view
+    view_configs = {
+        'section_x': {'section_axis': 'X'},
+        'section_y': {'section_axis': 'Y'},
+        'section_z': {'section_axis': 'Z'},
+    }
+
+    section_axis = view_configs.get(view_name, {}).get('section_axis')
+
+    if section_axis:
+        # Apply section plane at model center
+        axis_map = {'X': bounds_center.x, 'Y': bounds_center.y, 'Z': bounds_center.z}
+        cut_position = axis_map[section_axis]
+        print(f"Applying section plane: axis={section_axis}, position={cut_position}")
+        apply_section_plane(section_axis, cut_position)
+
     setup_camera_for_view(view_name, bounds_center, bounds_size, max_dim)
-    
+
     # Set output path
     bpy.context.scene.render.filepath = output_path
-    
+
     # Render
     bpy.ops.render.render(write_still=True)
-    
+
+    # Remove section plane if applied (for subsequent renders)
+    if section_axis:
+        remove_section_plane()
+
     return os.path.exists(output_path)
 
 
@@ -717,12 +911,13 @@ def main():
     input_file = argv[0]
     output_dir = argv[1]
     
-    # Parse views (default: all standard views)
+    # Parse views (default: all standard views, not including section views)
     default_views = ['iso', 'front', 'back', 'left', 'right', 'top', 'bottom']
     views = argv[2:] if len(argv) > 2 else default_views
-    
-    # Validate views
-    valid_views = {'iso', 'front', 'back', 'left', 'right', 'top', 'bottom'}
+
+    # Validate views (includes section views)
+    valid_views = {'iso', 'front', 'back', 'left', 'right', 'top', 'bottom',
+                   'section_x', 'section_y', 'section_z'}
     for v in views:
         if v not in valid_views:
             print(f"Warning: Unknown view '{v}', skipping")

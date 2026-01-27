@@ -98,8 +98,12 @@ interface Fetch3mfResult {
   statusCode?: number;
 }
 
-type AllowedView = 'iso' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
-const ALLOWED_VIEWS = new Set<AllowedView>(['iso', 'front', 'back', 'left', 'right', 'top', 'bottom']);
+type AllowedView = 'iso' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
+                 | 'section_x' | 'section_y' | 'section_z';
+const ALLOWED_VIEWS = new Set<AllowedView>([
+  'iso', 'front', 'back', 'left', 'right', 'top', 'bottom',
+  'section_x', 'section_y', 'section_z'
+]);
 const ALLOWED_VIEW_LIST = Array.from(ALLOWED_VIEWS).join(', ');
 
 /**

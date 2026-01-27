@@ -7,7 +7,8 @@ plugin:
   author: Fabrikator Team
   description: |
     AI-powered visual validation of 3D CAD geometry.
-    Renders 3MF files from multiple viewpoints using Blender
+    Renders 3MF files from multiple viewpoints using Blender,
+    including cross-section views to inspect internal geometry.
   tags:
     # - validation
     - vision
@@ -69,18 +70,24 @@ capabilities:
           **Remember**: The design image is your target. Your renders should look like the design image. If they don't match, you must iterate and adjust until they do. This may require 5-10+ iterations.
           
           Use the `render_preview` tool to get rendered images from standard views:
-          
+
           ```
           call_plugin(
             pluginSlug="forge-plugins-vision",
             toolName="render_preview",
             args={
               part: "assembly_all",                // Used for naming outputs
-              views: ["iso", "front", "right"]     // REQUIRED: one or more of iso, front, back, left, right, top, bottom
+              views: ["iso", "front", "right"]     // REQUIRED: one or more views (see below)
             }
           )
           ```
-          
+
+          **Available views:**
+          - Standard: `iso`, `front`, `back`, `left`, `right`, `top`, `bottom`
+          - Cross-section: `section_x`, `section_y`, `section_z` (cuts through model center, shows interior)
+
+          Use section views when you need to verify internal geometry, wall thickness, or hidden features.
+
           It returns base64 PNG artifacts named `<part>_<view>.png` which you will see in the chat history.
           **Analyze these images carefully AND COMPARE TO THE DESIGN IMAGE** before proceeding or marking a task as complete.
           ITS BETTER TO VALIDATE PARTS INDIVIDUALLY THAN ASSEMBLIES, AS ASSEMBLIES CAN HIDE ISSUES IN PARTS.
@@ -100,10 +107,11 @@ capabilities:
             type: array
             items:
               type: string
-              enum: [iso, front, back, left, right, top, bottom]
+              enum: [iso, front, back, left, right, top, bottom, section_x, section_y, section_z]
             description: |
-              Required. One or more standard views to render.
-              Allowed: iso, front, back, left, right, top, bottom.
+              Required. One or more views to render.
+              Standard views: iso, front, back, left, right, top, bottom.
+              Section views: section_x, section_y, section_z (cross-section cuts through model center).
         required:
           - part
           - views
