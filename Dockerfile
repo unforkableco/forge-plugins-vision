@@ -51,6 +51,8 @@ RUN mkdir -p /tmp/vision-validate
 ENV PORT=8080
 ENV WORK_DIR=/tmp/vision-validate
 ENV BLENDER_PATH=/usr/bin/blender
+ENV RENDER_CONCURRENCY=2
+ENV MAX_PENDING_JOBS=20
 
 # Expose port
 EXPOSE 8080

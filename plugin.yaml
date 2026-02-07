@@ -49,14 +49,14 @@ capabilities:
 
 
           ## VISUAL VERIFICATION PROTOCOL
-          
+
           **CRITICAL: DO NOT TRUST YOUR SCAD SCRIPTS BLINDLY.**
           Code that looks correct often produces unexpected geometry (intersections, gaps, misalignment) that is invisible in code but obvious in renders.
 
           ## CRITICAL: render_preview gives you IMAGES, not verdicts.
-          The fact that render_preview returns "ok: true" means the RENDERING SUCCEEDED - 
+          The fact that render_preview returns "ok: true" means the RENDERING SUCCEEDED -
           it says NOTHING about geometry correctness!
-          
+
           **YOU MUST:**
           1.  Generate parts using `write_scad`.
           2.  **IMMEDIATELY** verify them visually using `render_preview`.
@@ -66,11 +66,14 @@ capabilities:
               - Are the proportions matching the design?
               - Am I missing any small details or protrusions?
           5.  Iterate until the VISUAL result **MATCHES THE DESIGN IMAGE**, not just until it "looks okay".
-          
-          **Remember**: The design image is your target. Your renders should look like the design image. If they don't match, you must iterate and adjust until they do. This may require 5-10+ iterations.
-          
-          Use the `render_preview` tool to get rendered images from standard views:
 
+          **Remember**: The design image is your target. Your renders should look like the design image. If they don't match, you must iterate and adjust until they do. This may require 5-10+ iterations.
+
+          ## Two-Step Render Workflow
+
+          Rendering is asynchronous. You must follow this two-step workflow:
+
+          **Step 1: Submit render job**
           ```
           call_plugin(
             pluginSlug="forge-plugins-vision",
@@ -81,6 +84,20 @@ capabilities:
             }
           )
           ```
+          This returns a `jobId` immediately (does NOT return images yet).
+
+          **Step 2: Poll for results**
+          ```
+          call_plugin(
+            pluginSlug="forge-plugins-vision",
+            toolName="job_status",
+            args={
+              jobId: "<the jobId from step 1>"
+            }
+          )
+          ```
+          Keep polling until the status is `completed` (returns images) or `failed` (returns error).
+          If status is `queued` or `processing`, wait a few seconds and poll again.
 
           **Available views:**
           - Standard: `iso`, `front`, `back`, `left`, `right`, `top`, `bottom`
@@ -88,15 +105,15 @@ capabilities:
 
           Use section views when you need to verify internal geometry, wall thickness, or hidden features.
 
-          It returns base64 PNG artifacts named `<part>_<view>.png` which you will see in the chat history.
+          When completed, `job_status` returns base64 PNG artifacts named `<part>_<view>.png` which you will see in the chat history.
           **Analyze these images carefully AND COMPARE TO THE DESIGN IMAGE** before proceeding or marking a task as complete.
           ITS BETTER TO VALIDATE PARTS INDIVIDUALLY THAN ASSEMBLIES, AS ASSEMBLIES CAN HIDE ISSUES IN PARTS.
 
   tools:
     - name: render_preview
       description: |
-        Render one or more standard views (at configured resolution) of a 3MF file and return the images.
-        Requires a direct artifact3mfUrl (same contract as vision_validate).
+        Submit a render job for one or more views of a 3MF file. Returns a jobId immediately.
+        Use job_status to poll for completion and retrieve the rendered images.
       parameters:
         type: object
         properties:
@@ -119,9 +136,25 @@ capabilities:
       execution:
         config:
           endpoint: /render
-          timeout: 180000
-          retries: 1
+          timeout: 10000
+          retries: 0
+
+    - name: job_status
+      description: Check render job status. Returns queued/processing/completed/failed. When completed, returns rendered images.
+      parameters:
+        type: object
+        properties:
+          jobId:
+            type: string
+            description: Job ID returned by render_preview.
+        required:
+          - jobId
+        additionalProperties: false
+      execution:
+        config:
+          endpoint: /job/status
+          timeout: 10000
+          retries: 0
 
 pricing:
   model: free
-
