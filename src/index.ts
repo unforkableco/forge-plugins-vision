@@ -574,10 +574,11 @@ app.post('/render', (req: express.Request, res: express.Response) => {
   });
 });
 
-// Job status endpoint (plugin tool format: POST with { args: { jobId }, context: {...} })
+// Job status endpoint (supports both plugin tool format and direct polling)
 app.post('/job/status', (req: express.Request, res: express.Response) => {
   const { args } = req.body || {};
-  const jobId = args?.jobId;
+  // Accept jobId from: nested plugin format, top-level body, or query param
+  const jobId = args?.jobId || req.body?.jobId || (req.query.jobId as string);
 
   if (!jobId) {
     return res.json({
